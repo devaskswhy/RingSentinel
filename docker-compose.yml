@@ -1,0 +1,76 @@
+# RingSentinel local development stack.
+#
+#   docker compose up            -> Postgres + migrated backend + frontend
+#   docker compose exec backend python -m scripts.seed   -> the one seed command
+#
+# Values come from .env at the repo root (copy .env.example to .env first).
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ringsentinel-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ringsentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ringsentinel}
+      POSTGRES_DB: ${POSTGRES_DB:-ringsentinel}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Backend waits on this, so migrations never race an unready server.
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ringsentinel} -d ${POSTGRES_DB:-ringsentinel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: ringsentinel-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ringsentinel}:${POSTGRES_PASSWORD:-ringsentinel}@db:5432/${POSTGRES_DB:-ringsentinel}
+      APP_ENV: ${APP_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      # Phase 4. Subscription OAuth token from `claude setup-token`.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: ringsentinel-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      # Keeps the image's node_modules from being shadowed by the bind mount.
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  pgdata:

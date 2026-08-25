@@ -1,0 +1,10 @@
+# Normalise everything to LF in the repository.
+# Critical for backend/entrypoint.sh: a CRLF checkout on Windows breaks the
+# shebang inside the Linux container ("bad interpreter: /usr/bin/env bash^M").
+* text=auto eol=lf
+
+# Binary / generated
+*.png binary
+*.jpg binary
+*.ico binary
+package-lock.json linguist-generated=true

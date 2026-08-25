@@ -1,0 +1,20 @@
+# Web framework
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+
+# Database + migrations
+sqlalchemy==2.0.52
+alembic==1.19.1
+psycopg[binary]==3.3.4
+
+# Config
+pydantic-settings==2.15.0
+
+# Graph / detection (Phase 3)
+networkx==3.6.1
+
+# Payments - TEST MODE ONLY (Phase 2)
+razorpay==2.0.1
+
+# LLM case files (Phase 4) - authenticated via Claude subscription OAuth, not an API key
+claude-agent-sdk==0.2.144
