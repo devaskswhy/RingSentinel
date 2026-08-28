@@ -143,6 +143,39 @@ def _persist(db: Session, run: DetectionRun) -> None:
 
         run.persisted_ids[index] = cluster_id
 
+        # Per-cluster flag event. The run-level row below records the pass as a
+        # whole; this one makes each cluster's own history complete, so
+        # GET /clusters/{id} can show flagged -> case file -> decision.
+        db.add(
+            AuditLog(
+                actor=AuditActor.system,
+                action="cluster_flagged",
+                target_type="cluster",
+                target_id=str(cluster_id),
+                detail_json={
+                    "score": round(item.score, 6),
+                    "size": item.size,
+                    "cadence": item.cadence.classification,
+                    "detector_version": run.config.version,
+                    "score_threshold": run.config.score_threshold,
+                    "headline": item.headline(),
+                    "shared_attributes": [
+                        {
+                            "type": a.attribute_type,
+                            "external_ref": a.external_ref,
+                            "customer_count": a.customer_count,
+                            "observations": a.observations,
+                        }
+                        for a in item.top_attributes(5)
+                    ],
+                    "note": (
+                        "Flagged for human review. Status is 'pending' and no "
+                        "customer-facing action has been taken."
+                    ),
+                },
+            )
+        )
+
     db.add(
         AuditLog(
             actor=AuditActor.system,

@@ -32,3 +32,6 @@ pgdata/
 
 # ---- Claude ----
 .claude/settings.local.json
+
+# Empty stand-in for the optional Claude credential mount
+.claude-placeholder/

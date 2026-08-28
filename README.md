@@ -86,6 +86,38 @@ Verify the ingest pipeline at any time (rolls back, writes nothing):
 docker compose exec backend python -m scripts.verify_ingest
 ```
 
+**6. Detect rings and review them (Phases 3-4)**
+
+```bash
+# Find coordinated clusters and write them to the review queue
+docker compose exec backend python -m scripts.detect
+
+# Write Claude's plain-language case file for each flagged cluster
+docker compose exec backend python -m scripts.generate_case_files
+```
+
+Claude case files need a Claude subscription login, not an API key. Either set
+`CLAUDE_CODE_OAUTH_TOKEN` in `.env` (run `claude setup-token` to get one), or
+point `CLAUDE_CONFIG_HOST_DIR` at your `~/.claude` so the container reuses your
+existing login. Check it with:
+
+```bash
+docker compose exec backend python -m scripts.verify_claude_auth
+```
+
+Then review through the API:
+
+```bash
+curl localhost:8000/clusters                       # the queue
+curl localhost:8000/clusters/<id>                  # case file + evidence + graph
+
+curl -X POST localhost:8000/clusters/<id>/approve      -H 'Content-Type: application/json'      -d '{"reason":"why you decided this","reviewer":"your name"}'
+```
+
+Approving or dismissing requires a written reason and is the only way a
+cluster's status can change — a database trigger rejects any other attempt.
+Nothing in RingSentinel blocks, freezes, or restricts a customer account.
+
 ## Verify it worked
 
 | What | Where |
@@ -95,6 +127,7 @@ docker compose exec backend python -m scripts.verify_ingest
 | Liveness | http://localhost:8000/health |
 | Schema health | http://localhost:8000/health/db |
 | Corpus summary (after seeding) | http://localhost:8000/eval/corpus |
+| Review queue | http://localhost:8000/clusters |
 
 `/health/db` should report `"status": "ok"` with an empty `tables_missing`.
 

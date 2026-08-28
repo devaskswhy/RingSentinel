@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
+from app.routers.clusters import router as clusters_router
 from app.webhooks import router as webhooks_router
 
 settings = get_settings()
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(webhooks_router)
+app.include_router(clusters_router)
 
 EXPECTED_TABLES = (
     "entities",
@@ -49,7 +51,7 @@ def root() -> dict:
     return {
         "service": "ringsentinel-api",
         "version": "0.1.0",
-        "phase": "1 - scaffolding",
+        "phase": "4 - case files and human review",
         "docs": "/docs",
     }
 

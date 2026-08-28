@@ -184,6 +184,11 @@ All are called out above and are easy to remove if unwanted:
 4. `clusters.evidence_json` / `.cadence` / `.detector_version` (migration 0002) —
    Phase 3 requires every score to be explainable, and `(id, status, score,
    created_at)` has nowhere to record which attributes drove the score.
+5. `case_files` table (migration 0003) — case files must be cached rather than
+   regenerated per page view, which needs somewhere to store them.
+6. `trg_clusters_status_human_only` (migration 0003) — makes "no auto-execution"
+   a property the database enforces rather than a convention code review has to
+   catch.
 
 Plus two enforcement mechanisms not requested but consistent with the brief: the
 append-only trigger, and the `v_transactions_detector` view.
@@ -462,6 +467,120 @@ created_at)` had nowhere to record *why* a cluster was flagged:
 
 ---
 
+## 5c. Phase 4 — case files and the human gate
+
+### How the Agent SDK is authenticated (verified 2026-08-28)
+
+| Where | Credential | Billing |
+|---|---|---|
+| Host | `~/.claude/.credentials.json`, `subscriptionType: pro` | **Subscription** |
+| Container | same file, bind-mounted to `/root/.claude` | **Subscription** |
+
+`ANTHROPIC_API_KEY` is **not set anywhere** — not in `.env`, not in the shell,
+not in the container — and `docker-compose.yml` does not pass it through at all,
+so it cannot be picked up accidentally. There is no path by which this phase
+bills against pay-as-you-go API credit.
+
+The container originally had *no* credentials and every SDK call failed. Fixed
+with a bind mount driven by `CLAUDE_CONFIG_HOST_DIR` in `.env`. The cleaner
+long-term option is `claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`, which is
+headless and needs no mount; both work, and nothing in the code hardcodes a
+credential source.
+
+```bash
+docker compose exec backend python -m scripts.verify_claude_auth
+```
+
+### Claude explains, humans decide — enforced three ways
+
+A prompt is not an access control, so the boundary is enforced at three
+independent layers. Layer 1 can be argued with; layers 2 and 3 cannot.
+
+| # | Layer | Mechanism |
+|---|---|---|
+| 1 | Prompt | `app/prompts.py` states the explain-only role |
+| 2 | SDK | `allowed_tools=[]`, no MCP servers — **no function exists for Claude to call** |
+| 3 | Database | trigger `trg_clusters_status_human_only` rejects any `clusters.status` change outside a human review transaction |
+
+**Claude does not see ground truth either.** `case_files.py` assembles its
+context from `v_transactions_detector`, the same label-free view the detector
+uses. If Claude could read `is_synthetic_ring_id` the case files would be
+trivially correct and the demo worthless — invariant #4 covers the LLM layer.
+
+### The human gate
+
+`app/routers/clusters.py` is the only module in the project that writes
+`clusters.status`, and the only one that sets `ringsentinel.human_review`, the
+transaction-local flag the trigger demands. Everything else — the detector, the
+case-file writer, a script, a psql prompt — gets an exception:
+
+```
+ERROR: clusters.status may only be changed by a human review action
+       (RingSentinel invariants #1 and #2). Attempted pending -> cleared
+       without ringsentinel.human_review set.
+```
+
+`scripts/verify_human_gate.py` proves all of this mechanically: who writes
+status, who sets the guard, that no block/freeze/decline call exists anywhere,
+and at runtime that the database refuses an unguarded update.
+
+### ⚠️ A naming decision worth confirming
+
+The Phase 1 enum offers `cleared` / `dismissed` / `needs_review`. The two
+endpoints map as:
+
+- **approve** → `cleared` — "cleared out of the review queue as a confirmed
+  case", *not* "the accounts are cleared of suspicion"
+- **dismiss** → `dismissed` — false positive
+
+With only these statuses and two endpoints this is the only mapping that leaves
+every status reachable, but `cleared` reads ambiguously. Worth renaming if the
+review UI in Phase 5 makes it confusing.
+
+**Approving does not block anyone.** It records a human's judgement and moves the
+cluster out of the pending queue. No customer-facing action exists in this
+codebase.
+
+### Endpoints
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/clusters` | queue, filter by `status` / `min_score` |
+| GET | `/clusters/{id}` | case file + evidence + graph + full audit trail. **Never generates** — that would mean an LLM call per page view |
+| POST | `/clusters/{id}/case-file` | generate or reuse; `?force=true` to regenerate |
+| POST | `/clusters/{id}/approve` | human confirms — `reason` required (min 5 chars) |
+| POST | `/clusters/{id}/dismiss` | human rejects — `reason` required |
+
+Deciding an already-decided cluster returns **409**: a decision is recorded once,
+and re-deciding would overwrite an audit fact.
+
+### Caching
+
+A case file is reused when its `prompt_version` **and** the cluster's score both
+match. Retuning the detector changes the score, which correctly invalidates an
+explanation of the old number. Measured: 19.6s to generate, **0.109s** cached.
+
+### Audit trail
+
+Four event types, every one carrying its actor:
+
+| Action | Actor | Written by |
+|---|---|---|
+| `cluster_flagged` | `system` | detector, per cluster |
+| `case_file_generated` | `claude` | case-file writer |
+| `cluster_approved` | `human` | approve endpoint |
+| `cluster_dismissed` | `human` | dismiss endpoint |
+
+Audit action names are spelled out in `ACTION_TO_AUDIT_NAME` rather than built
+from the verb — `f"cluster_{action}d"` produced `cluster_dismissd`, and an audit
+trail with a typo in the action name is one nobody can reliably query.
+
+Because `audit_log` is append-only, deleting and re-running the detector
+destroys the derived clusters but **not** the record of what was decided about
+them. That is the point of the table.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -490,6 +609,15 @@ docker compose exec backend python -m scripts.evaluate_detection --sweep
 
 # Prove the detector cannot see ground truth (invariant #4)
 docker compose exec backend python -m scripts.verify_detector_isolation
+
+# Phase 4 - case files and review
+docker compose exec backend python -m scripts.verify_claude_auth
+docker compose exec backend python -m scripts.generate_case_files --limit 3
+docker compose exec backend python -m scripts.verify_human_gate
+
+curl localhost:8000/clusters
+curl -X POST localhost:8000/clusters/<id>/case-file
+curl -X POST localhost:8000/clusters/<id>/approve      -H 'Content-Type: application/json'      -d '{"reason":"why you decided this","reviewer":"your name"}'
 ```
 
 - Frontend → http://localhost:3000
@@ -514,7 +642,7 @@ docker compose exec backend alembic upgrade head
 | **1** | Monorepo scaffold, Docker Compose, entity-graph schema + migration, env template, README | **Done** |
 | **2** | Razorpay test-mode ingest + synthetic ring generator: 6 archetypes, 12 rings, webhook ingestion path | **Done** |
 | **3** | NetworkX detection: graph build, clustering, 4-signal scoring, cadence classification. 8/8 tuning rings, 0 false flags. | **Done** |
-| **4** | Claude Agent SDK case files for each cluster. Auth path already verified. | Not started |
+| **4** | Claude Agent SDK case files + human-gated approve/dismiss API, with a DB trigger enforcing the gate. | **Done** |
 | **5** | Review UI: cluster queue, case file display, approve/dismiss, audit trail view | Not started |
 
 **Phase 1 constraints that were deliberately honoured:** no fake/mock data, no

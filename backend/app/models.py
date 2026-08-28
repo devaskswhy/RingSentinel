@@ -74,6 +74,18 @@ class AuditActor(str, enum.Enum):
     human = "human"
 
 
+class SuggestedAction(str, enum.Enum):
+    """Claude's RECOMMENDATION on a cluster. Never applied automatically.
+
+    Nothing in the system acts on this value. It is advice rendered to the human
+    analyst, who remains the only thing that can move a cluster out of `pending`.
+    """
+
+    likely_ring = "likely_ring"
+    review_closer = "review_closer"
+    likely_false_positive = "likely_false_positive"
+
+
 class CadenceClass(str, enum.Enum):
     """How a cluster's inter-transaction rhythm reads. Set by the Phase 3 detector."""
 
@@ -87,6 +99,9 @@ link_type_enum = SAEnum(LinkType, name="link_type", native_enum=True)
 cluster_status_enum = SAEnum(ClusterStatus, name="cluster_status", native_enum=True)
 audit_actor_enum = SAEnum(AuditActor, name="audit_actor", native_enum=True)
 cadence_class_enum = SAEnum(CadenceClass, name="cadence_class", native_enum=True)
+suggested_action_enum = SAEnum(
+    SuggestedAction, name="suggested_action", native_enum=True
+)
 
 
 # --------------------------------------------------------------------------
@@ -312,4 +327,64 @@ class AuditLog(Base):
     __table_args__ = (
         Index("ix_audit_log_target", "target_type", "target_id"),
         Index("ix_audit_log_created_at", "created_at"),
+    )
+
+
+class CaseFile(Base):
+    """Claude's plain-language explanation of one flagged cluster.
+
+    Cached: a page view reads the most recent row rather than regenerating.
+    One row per generation, not per cluster, so regenerating leaves the previous
+    case file intact and the history stays auditable.
+
+    `suggested_action` is advice. Nothing reads it to take action - only a human
+    calling the approve/dismiss endpoints can change a cluster's status, and a
+    database trigger enforces that.
+    """
+
+    __tablename__ = "case_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    cluster_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("clusters.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence_note: Mapped[str] = mapped_column(Text, nullable=False)
+    suggested_action: Mapped[SuggestedAction] = mapped_column(
+        suggested_action_enum, nullable=False
+    )
+    key_signals: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default="[]"
+    )
+    caveats: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    raw_response: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
+
+    model: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    prompt_version: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=""
+    )
+    cluster_score_at_generation: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="0"
+    )
+    detector_version: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=""
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_case_files_cluster", "cluster_id"),
+        Index(
+            "ix_case_files_cluster_generated",
+            "cluster_id",
+            text("generated_at DESC"),
+        ),
     )

@@ -42,12 +42,23 @@ services:
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
-      # Phase 4. Subscription OAuth token from `claude setup-token`.
+      # Phase 4 - Claude Agent SDK credentials.
+      #
+      # The SDK resolves credentials in this order:
+      #   1. ANTHROPIC_API_KEY          -> pay-as-you-go API billing. NOT used here,
+      #                                    and deliberately not passed through at all
+      #                                    so it cannot be picked up by accident.
+      #   2. CLAUDE_CODE_OAUTH_TOKEN    -> subscription OAuth, headless. Preferred.
+      #   3. ~/.claude/.credentials.json -> the host login, bind-mounted below.
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
+      # Local-dev fallback so the container can use the host's Claude login when
+      # no CLAUDE_CODE_OAUTH_TOKEN is set. Read-write because the CLI refreshes
+      # the token in place. Point CLAUDE_CONFIG_HOST_DIR at your ~/.claude.
+      - ${CLAUDE_CONFIG_HOST_DIR:-./.claude-placeholder}:/root/.claude
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
       interval: 10s
