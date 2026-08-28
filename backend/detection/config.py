@@ -1,9 +1,13 @@
 """Detector configuration. THIS IS THE TUNING SURFACE.
 
 Every threshold, weight, and cut-off the detector uses lives here as a named
-constant. Nothing numeric should be buried in the scoring code - when these get
-calibrated against the held-out rings in Phase 6, this file is the only thing
-that should need to change.
+constant. Nothing numeric should be buried in the scoring code - this file is
+the only thing that should need to change when the detector is recalibrated.
+
+NOTE: the held-out rings (9-12) have already been evaluated once, on 2026-08-28,
+with the values below. Changing anything here invalidates that result as an
+unbiased estimate - it would no longer be a measurement on unseen data. If you
+change a value, say so and re-report.
 
 `DETECTOR_VERSION` is stamped onto every cluster row. Bump it whenever a value
 below changes, so results produced under different settings stay distinguishable
@@ -163,8 +167,8 @@ SHALLOW_ACCOUNT_MAX_TRANSACTIONS = 3
 #: in [0.25, 0.35] yields 8/8 rings with zero false flags; below 0.25 a benign
 #: household cluster creeps in, above 0.35 the two weakest rings drop out. 0.30
 #: is the centre of that plateau, so it has the most room on both sides before
-#: behaviour changes - which is what should survive contact with the held-out
-#: rings in Phase 6.
+#: behaviour changes. It did survive contact with the held-out rings: the same
+#: plateau held there, and slightly wider.
 #:
 #: Measured margin at 0.30: weakest true ring 0.371, strongest benign cluster
 #: below 0.25.

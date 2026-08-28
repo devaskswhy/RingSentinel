@@ -114,9 +114,33 @@ curl localhost:8000/clusters/<id>                  # case file + evidence + grap
 curl -X POST localhost:8000/clusters/<id>/approve      -H 'Content-Type: application/json'      -d '{"reason":"why you decided this","reviewer":"your name"}'
 ```
 
-Approving or dismissing requires a written reason and is the only way a
-cluster's status can change — a database trigger rejects any other attempt.
-Nothing in RingSentinel blocks, freezes, or restricts a customer account.
+Approving or dismissing requires a written reason, and only a human review can
+record a decision — a database trigger rejects any other attempt, and a recorded
+decision can never be revised. Nothing in RingSentinel blocks, freezes, or
+restricts a customer account.
+
+**7. Score the detector honestly**
+
+```bash
+# Paste-ready evaluation summary; --store records the snapshot
+docker compose exec backend python -m scripts.report --split holdout --store
+
+# The same numbers as JSON, feeding the console scorecard
+curl localhost:8000/metrics
+```
+
+Rings 9–12 were held out through all tuning and evaluated once. Re-running
+reproduces; changing a threshold in response to what it shows would turn them
+into a second tuning set, and there is no third.
+
+**Verification scripts** — each proves an invariant rather than asserting it:
+
+```bash
+docker compose exec backend python -m scripts.verify_detector_isolation  # #4
+docker compose exec backend python -m scripts.verify_human_gate          # #1 #2 #3
+docker compose exec backend python -m scripts.verify_ingest              # idempotency
+docker compose exec backend python -m scripts.verify_claude_auth         # auth path
+```
 
 ## Verify it worked
 
@@ -129,6 +153,7 @@ Nothing in RingSentinel blocks, freezes, or restricts a customer account.
 | Schema health | http://localhost:8000/health/db |
 | Corpus summary (after seeding) | http://localhost:8000/eval/corpus |
 | Review queue | http://localhost:8000/clusters |
+| Held-out metrics | http://localhost:8000/metrics |
 
 `/health/db` should report `"status": "ok"` with an empty `tables_missing`.
 

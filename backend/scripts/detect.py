@@ -3,9 +3,9 @@
     docker compose exec backend python -m scripts.detect --help
 
 Defaults to the TUNING split (seeded rings 1-8). The held-out rings 9-12 stay
-excluded unless explicitly asked for, and asking for them prints a warning -
-they are reserved for Phase 6 and looking at them while tuning invalidates the
-evaluation.
+excluded unless explicitly asked for, and asking for them prints a warning.
+They have already been evaluated once; tuning anything against them now would
+turn them into a second tuning set.
 
 No LLM calls happen here. This is deterministic graph and statistics work.
 """
@@ -86,8 +86,9 @@ def main() -> int:
 
     if args.split == SPLIT_HOLDOUT:
         print(f"{WARN} Running against the HELD-OUT split (rings 9-12).")
-        print("       These are reserved for Phase 6 evaluation. Tuning any")
-        print("       threshold against them invalidates the held-out result.\n")
+        print("       These were evaluated once on 2026-08-28. Tuning any")
+        print("       threshold against them destroys the only unbiased")
+        print("       estimate this project has.\n")
 
     db = SessionLocal()
     try:
@@ -188,9 +189,17 @@ def main() -> int:
         if args.no_persist:
             print(f"{OK} dry run - nothing written.")
         else:
-            print(f"{OK} wrote {len(run.flagged)} cluster(s), status='pending'.")
-            print(f"     replaced {run.deleted_pending} previously-pending cluster(s); "
-                  f"preserved {run.preserved_reviewed} already reviewed by a human.")
+            confident = sum(
+                1 for c in run.flagged if c.score >= config.confident_score_threshold
+            )
+            ambiguous = len(run.flagged) - confident
+            print(f"{OK} wrote {len(run.flagged)} cluster(s): {confident} pending, "
+                  f"{ambiguous} needs_review.")
+            print(f"     both are pre-decision states - a human still has to look "
+                  f"at every one.")
+            print(f"     updated {run.updated_existing} existing; retired "
+                  f"{run.deleted_pending} stale; preserved {run.preserved_reviewed} "
+                  f"already decided by a human.")
         print(f"     {run.elapsed_seconds:.2f}s")
         return 0
     finally:

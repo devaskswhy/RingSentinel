@@ -73,21 +73,22 @@ RingSentinel/
 ├── .env.example           <- every required variable, with provenance comments
 ├── docker-compose.yml     <- db + backend + frontend
 ├── backend/
-│   ├── Dockerfile
-│   ├── entrypoint.sh      <- runs `alembic upgrade head`, then uvicorn
-│   ├── requirements.txt
-│   ├── alembic.ini
-│   ├── alembic/
-│   │   ├── env.py         <- reads DATABASE_URL from the environment
-│   │   └── versions/0001_initial_entity_graph_schema.py
+│   ├── entrypoint.sh          <- alembic upgrade head, then uvicorn
+│   ├── alembic/versions/      <- 0001 schema · 0002 evidence · 0003 case files
+│   │                             + status guard · 0004 fingerprint · 0005
+│   │                             evaluation_runs + triage guard
 │   ├── app/
 │   │   ├── config.py          <- pydantic-settings
-│   │   ├── db.py              <- engine + session
-│   │   ├── models.py          <- the entity-graph schema
-│   │   ├── main.py            <- health + /eval/corpus, mounts the webhook router
+│   │   ├── db.py · models.py  <- engine/session · the ORM schema
+│   │   ├── main.py            <- health, /eval/corpus, router mounting
 │   │   ├── razorpay_client.py <- test-mode-only client: pacing, 429 retry
 │   │   ├── ingest.py          <- event -> entities/entity_links/transactions
-│   │   └── webhooks.py        <- POST /webhooks/razorpay, HMAC verification
+│   │   ├── webhooks.py        <- POST /webhooks/razorpay, HMAC verification
+│   │   ├── prompts.py         <- the explain-only system prompt
+│   │   ├── case_files.py      <- Claude Agent SDK integration
+│   │   └── routers/
+│   │       ├── clusters.py    <- THE HUMAN GATE. Only writer of a decision.
+│   │       └── evaluation.py  <- /eval/scorecard and /metrics
 │   ├── generator/             <- Phase 2 synthetic corpus (pure, no network)
 │   │   ├── config.py          <- seed, ring specs, held-out split, volumes
 │   │   ├── identities.py      <- opaque token pools (no PII is ever created)
@@ -96,15 +97,53 @@ RingSentinel/
 │   │   ├── normal.py          <- uncorrelated background traffic
 │   │   ├── planned.py         <- PlannedTransaction + Razorpay notes mapping
 │   │   └── plan.py            <- assembles the whole corpus
+│   ├── detection/             <- MAY NOT READ LABELS. Enforced by AST check.
+│   │   ├── config.py          <- every threshold and weight, in one place
+│   │   ├── graph.py           <- entity_links -> NetworkX, hub filtering
+│   │   ├── clustering.py      <- components + Louvain refinement
+│   │   ├── baseline.py        <- label-free population timing baseline
+│   │   ├── cadence.py         <- human / agent / inconclusive
+│   │   ├── scoring.py         <- the four signals + evidence assembly
+│   │   └── pipeline.py        <- orchestration, fingerprint upsert, triage
+│   ├── evaluation/            <- MAY read labels. Never imported by detection/.
+│   │   ├── splits.py          <- tuning vs held-out; opaque exclusion sets
+│   │   ├── report.py          <- ring/cluster matching rules
+│   │   ├── metrics.py         <- precision, recall, exceptions, storage
+│   │   └── cost.py            <- false-positive cost model (all estimates)
 │   └── scripts/
-│       ├── seed.py                 <- Phase 1 schema verification
-│       ├── seed_rings.py           <- Phase 2 end-to-end seed (the one command)
-│       ├── verify_ingest.py        <- ingest self-test, rolls back
-│       └── verify_claude_auth.py   <- Agent SDK auth check
+│       ├── seed.py · seed_rings.py        <- schema check · the corpus seed
+│       ├── detect.py                      <- run the detector
+│       ├── generate_case_files.py         <- Claude case files
+│       ├── evaluate_detection.py          <- measure vs ground truth
+│       ├── report.py                      <- paste-ready evaluation summary
+│       ├── verify_ingest.py               <- ingest self-test, rolls back
+│       ├── verify_detector_isolation.py   <- proves invariant #4 (AST walk)
+│       ├── verify_human_gate.py           <- proves invariants #1/#2/#3
+│       └── verify_claude_auth.py          <- Agent SDK auth check
 └── frontend/
-    ├── Dockerfile
-    └── app/               <- App Router; placeholder page only in Phase 1
+    ├── lib/
+    │   ├── tokens.ts          <- design tokens, JS mirror of globals.css
+    │   ├── api.ts             <- typed backend client
+    │   └── smoothScroll.ts    <- Lenis + GSAP ScrollTrigger, wired as one
+    ├── components/
+    │   ├── landing/           <- Loader, RingGraph
+    │   └── console/           <- ClusterDetail, GraphView, Scorecard,
+    │                             AuditTrail, Bits
+    └── app/
+        ├── globals.css        <- design tokens live here
+        ├── page.tsx           <- Surface A, the landing page
+        └── console/page.tsx   <- Surface B, the review console
 ```
+
+**Two package boundaries carry real weight:**
+
+- `detection/` may not read ground-truth labels or import `evaluation.*`.
+  `scripts/verify_detector_isolation.py` walks the AST and fails the build if it
+  does.
+- `app/routers/clusters.py` is the only code that may record a **decision**.
+  `detection/pipeline.py` may triage between `pending` and `needs_review`, and
+  nothing else may touch status at all. `scripts/verify_human_gate.py` proves it
+  statically and at runtime.
 
 ---
 
@@ -745,6 +784,16 @@ Attribute nodes are excluded deliberately — a reviewer decides about accounts,
 and including whichever device the crew happened to use would break the match
 every time the cluster picked up one more shared attribute. A re-run updates the
 matching row in place and leaves status, case files, and audit history intact.
+
+**One limit worth knowing:** a cluster that is no longer flagged at all is still
+retired, and its case files cascade with it. That is correct for production — a
+group that stopped looking suspicious should leave the queue — but it bites when
+*switching evaluation splits*, because clusters outside the new scope simply
+vanish from the detector's view. The detector cannot tell "no longer suspicious"
+from "out of scope", and it must not be told, since scope is deliberately opaque
+to it (invariant #4). Practical consequence: pick a scope for the demo
+(`--split all` shows all twelve rings) and stay on it, rather than switching back
+and forth and paying for case-file regeneration each time.
 
 ---
 

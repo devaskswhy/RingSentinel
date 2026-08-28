@@ -12,9 +12,13 @@ reproducible; the external ids are not.
 
 Held-out split
 --------------
-Rings 1-8 are the tuning set. Rings 9-12 are HELD OUT and must not be looked at
-while tuning the detector - see `HOLDOUT_RING_NUMBERS`. Phase 3 tunes on the
-tuning set only; the held-out rings stay sealed until Phase 6 evaluation.
+Rings 1-8 are the tuning set. Rings 9-12 are HELD OUT - see
+`HOLDOUT_RING_NUMBERS`. They were sealed through Phase 3 tuning and opened once,
+on 2026-08-28, for the evaluation recorded in CLAUDE.md 5b-eval.
+
+They remain off-limits for tuning. Adjusting any threshold to improve a number
+on these rings converts them from held-out data into a second tuning set, and
+there is no third set to fall back on.
 """
 
 from __future__ import annotations

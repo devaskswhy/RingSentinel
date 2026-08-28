@@ -6,8 +6,9 @@ Defaults to the TUNING split. This script reads `is_synthetic_ring_id`, which is
 exactly why it lives outside `detection/` - the detector itself never sees a
 label. See `evaluation/splits.py` for the full argument.
 
-Running this against the held-out split before Phase 6 defeats the purpose of
-having one, so it warns loudly when asked to.
+The held-out split was evaluated once, on 2026-08-28. Re-running it is fine and
+reproduces; tuning a threshold in response to what it shows is not, so the
+script warns loudly when asked for that split.
 """
 
 from __future__ import annotations
@@ -48,8 +49,9 @@ def main() -> int:
 
     if args.split == SPLIT_HOLDOUT:
         print(f"{WARN} EVALUATING THE HELD-OUT SPLIT.")
-        print("       Only do this once, in Phase 6. Tuning against these")
-        print("       rings destroys the only unbiased estimate available.\n")
+        print("       Already evaluated once on 2026-08-28; this reproduces it.")
+        print("       Tuning against these rings destroys the only unbiased")
+        print("       estimate available.\n")
 
     overrides = {}
     if args.threshold is not None:

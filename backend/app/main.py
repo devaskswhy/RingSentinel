@@ -1,8 +1,12 @@
 """RingSentinel API.
 
-Phase 2 adds the Razorpay webhook receiver, which is the only path by which
-transactions enter the database. Detection and case-file routes arrive in later
-phases - see CLAUDE.md.
+Route groups:
+  /webhooks/razorpay   the ONLY path by which transactions enter the database
+  /clusters            the review queue and the human approve/dismiss gate
+  /metrics             held-out precision, recall, cost, exceptions
+  /eval/*              ground-truth surfaces; never called by detection code
+
+See CLAUDE.md for the invariants these routes are built to preserve.
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ settings = get_settings()
 app = FastAPI(
     title="RingSentinel API",
     description="Fraud-ring detection via entity graphs. Human-in-the-loop by design.",
-    version="0.1.0",
+    version="0.6.0",
 )
 
 app.add_middleware(
@@ -53,8 +57,8 @@ EXPECTED_TABLES = (
 def root() -> dict:
     return {
         "service": "ringsentinel-api",
-        "version": "0.1.0",
-        "phase": "4 - case files and human review",
+        "version": "0.6.0",
+        "phase": "6 - detection, case files, human review, held-out scoring",
         "docs": "/docs",
     }
 

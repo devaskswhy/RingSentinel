@@ -244,7 +244,7 @@ def scorecard(db: Session = Depends(get_db)) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# GET /metrics — the Phase 6 headline numbers
+# GET /metrics — held-out precision, recall, cost, and exceptions
 # ---------------------------------------------------------------------------
 
 metrics_router = APIRouter(tags=["evaluation"])
