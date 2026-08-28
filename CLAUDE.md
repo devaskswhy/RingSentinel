@@ -279,8 +279,38 @@ Consequences, stated plainly so nobody later assumes otherwise:
 | `human` | heavy-tailed lognormal gaps, diurnal, floor of 4s | picks promo codes at random |
 | `agent` | near-uniform ~1.6s gaps, **below human reaction time**, no diurnal shape | walks the promo list systematically, amount ladders |
 
-Measured on the current seed: median inter-order gap is **120s for human rings
-vs 1.6s for agent rings**.
+Measured in Postgres after the live seed: median inter-order gap is
+**120.44s for human rings vs 1.60s for agent rings**. (The per-ring *minimum*
+gap can dip below the 4s floor because several accounts in one ring act in
+parallel; the floor applies per account, and the median is the discriminating
+signal.)
+
+### Razorpay test-mode rate limits — measured, not documented
+
+Razorpay does not publish a hard number for standard API limits. Observed on
+this account: **429s begin around 3-4 requests/sec**. The full 1,499-order seed
+at `--rate 3` took **498s (~3.0/s sustained)** and hit only **3** rate-limits,
+all recovered automatically. `--rate 4` produced roughly 9% 429s. Start at 3.
+
+Note the SDK gives no help here: it discards HTTP status codes and only retries
+`ConnectionError`, so `app/razorpay_client.py` attaches a `requests` response
+hook to read the real status and `Retry-After` before the SDK maps the error to
+a generic `ServerError`.
+
+### Corpus as actually seeded
+
+| Metric | Value |
+|---|---|
+| Razorpay API calls | 1,502 (1,499 orders + 3 retries) |
+| Transactions | 1,499 — all with a real `order_...` id |
+| Entities | 635 (173 customer, 164 device, 163 instrument, 135 address) |
+| Entity links | 4,089 |
+| Failures | 0 |
+| Ring transactions | 599 across 12 rings; 900 normal |
+
+Separation check: ring accounts converge **3-9 per shared attribute**, while the
+densest cluster in background traffic is **3 accounts** (a benign second-device
+case). That gap is what makes a precision number meaningful.
 
 ### Ground truth and the held-out split
 
