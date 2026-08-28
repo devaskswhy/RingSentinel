@@ -447,7 +447,8 @@ before behaviour changes — which is what should survive the held-out rings.
 | Normal accounts swept in | **0 of 105 (0.0%)** |
 | Runtime | 0.04s, deterministic across runs |
 
-Rings 9–12 remain **untouched**. `--split holdout` warns loudly.
+Rings 9-12 were untouched at this point. They were opened once, later, under
+§5b-eval - and the detector scored 4/4 on them with zero false flags.
 
 ### Persistence
 
@@ -464,6 +465,67 @@ created_at)` had nowhere to record *why* a cluster was flagged:
   specific shared-attribute entity ids and external refs that drove them
 - `cadence` — enum `human_like | agent_like | inconclusive`
 - `detector_version` — so results stay traceable across threshold changes
+
+---
+
+## 5b-eval. Held-out evaluation — RUN ONCE, 2026-08-28
+
+Rings 9-12 were sealed from the moment the corpus was generated and were never
+looked at during Phase 3 tuning. This is the one unbiased estimate of whether
+the detector generalises or was fitted to the tuning split.
+
+Run with the **exact config committed in Phase 3** — `detection/` was verified
+byte-identical to commit `0762abe` before the run, detector `0.4.0`, threshold
+`0.30`. Nothing was changed afterwards.
+
+### Result
+
+| Metric | Held-out (rings 9-12) | Tuning (rings 1-8) |
+|---|---|---|
+| Rings detected | **4/4 (100%)** | 8/8 (100%) |
+| Cadence correct | **4/4** | 8/8 |
+| False flags | **0 (100% precision)** | 0 (100%) |
+| Normal accounts swept in | **0 of 105** | 0 of 105 |
+
+Every ring was recovered **completely** — 6/6, 8/8, 4/4, 5/5 accounts, not merely
+the 50% the matching rule requires.
+
+| Ring | Pattern | Cadence | Accounts | Score |
+|---|---|---|---|---|
+| ring_09 | card_testing | human | 6/6 | 0.578 |
+| ring_10 | promo_farming | agent | 8/8 | 0.846 |
+| ring_11 | return_abuse | human | 4/4 | 0.427 |
+| ring_12 | return_abuse | agent | 5/5 | 0.707 |
+
+### Did the threshold generalise?
+
+Post-hoc diagnostic only — **the config was not changed based on it.**
+
+| Threshold | Tuning plateau | Held-out plateau |
+|---|---|---|
+| 0.20 | 8/8, 1 false flag | 4/4, 1 false flag |
+| **0.25 – 0.35** | **8/8, 0 false** | **4/4, 0 false** |
+| 0.40 | 6/8, 0 false | 4/4, 0 false |
+
+The stable band on held-out data is *wider* than on tuning data, and 0.30 sits
+inside both. The weakest held-out ring scored 0.427 against a 0.30 threshold — a
+0.127 margin, healthier than the weakest tuning ring at 0.371.
+
+### Full corpus, all 12 rings
+
+**12/12 detected, 12/12 cadence correct, 0 false flags, every cluster 100% pure.**
+
+### ⚠️ What this number does and does not mean
+
+This is a **synthetic corpus that this project generated**, and it is separable
+by construction: ring identities are salted per ring, so no two seeded rings
+share an entity, and background accounts each get their own device, address, and
+instrument. Real merchant data is far messier — real rings bridge into one
+another, benign sharing is dense and irregular, and attribute hygiene is poor.
+
+So 100% here means **the detector does what it was designed to do on data of this
+shape, and did not overfit the tuning split**. It is not a claim about production
+accuracy. Anyone presenting this number should say so.
 
 ---
 
@@ -643,6 +705,7 @@ docker compose exec backend alembic upgrade head
 | **2** | Razorpay test-mode ingest + synthetic ring generator: 6 archetypes, 12 rings, webhook ingestion path | **Done** |
 | **3** | NetworkX detection: graph build, clustering, 4-signal scoring, cadence classification. 8/8 tuning rings, 0 false flags. | **Done** |
 | **4** | Claude Agent SDK case files + human-gated approve/dismiss API, with a DB trigger enforcing the gate. | **Done** |
+| **eval** | Held-out evaluation on rings 9-12, run once with the Phase 3 config: 4/4 rings, 0 false flags | **Done** |
 | **5** | Review UI: cluster queue, case file display, approve/dismiss, audit trail view | Not started |
 
 **Phase 1 constraints that were deliberately honoured:** no fake/mock data, no
