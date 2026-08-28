@@ -32,6 +32,23 @@ FAIL = "[FAIL]"
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 REVIEW_MODULE = "app/routers/clusters.py"
 
+#: Modules permitted to write clusters.status at all, each with its reason.
+#: Adding an entry should require justifying it out loud. Note that permission
+#: to write A status is not permission to write a DECISION - the database
+#: enforces that separately, and runtime checks 4 and 4b are what actually
+#: guarantee it.
+ALLOWED_STATUS_WRITERS = {
+    REVIEW_MODULE: (
+        "human review endpoints - the only code that may record a decision "
+        "(cleared / dismissed) and the only code that sets the guard"
+    ),
+    "detection/pipeline.py": (
+        "triage only - moves a flagged cluster between pending and "
+        "needs_review. Both mean 'a human still has to look at this'; neither "
+        "is a decision and neither touches a customer."
+    ),
+}
+
 #: Verbs that would mean RingSentinel acting on a customer. None may appear as a
 #: function call anywhere in the codebase.
 FORBIDDEN_CALL_NAMES = {
@@ -120,10 +137,14 @@ def main() -> int:  # noqa: C901
     print()
     print("1. Who writes clusters.status?")
     for rel in writers or ["(nobody)"]:
-        marker = OK if rel == REVIEW_MODULE else FAIL
-        print(f"   {marker} {rel}")
-    if writers != [REVIEW_MODULE]:
-        problems.append(f"status writers should be exactly [{REVIEW_MODULE}], got {writers}")
+        permitted = rel in ALLOWED_STATUS_WRITERS
+        print(f"   {OK if permitted else FAIL} {rel}")
+        if permitted:
+            print(f"       {ALLOWED_STATUS_WRITERS[rel]}")
+        else:
+            problems.append(
+                f"{rel} writes clusters.status but is not a permitted writer"
+            )
 
     print("\n2. Who sets the human-review guard?")
     for rel in guards or ["(nobody)"]:
@@ -166,6 +187,35 @@ def main() -> int:  # noqa: C901
             except Exception:
                 savepoint.rollback()
                 print(f"   {OK} refused, as designed")
+
+        print("\n4b. A recorded decision cannot be revised, even by a human:")
+        decided = db.execute(
+            text(
+                "SELECT id, status::text FROM clusters "
+                "WHERE status IN ('cleared', 'dismissed') LIMIT 1"
+            )
+        ).first()
+        if decided is None:
+            print(f"   {OK} (no decided clusters to test against)")
+        else:
+            savepoint = db.begin_nested()
+            try:
+                db.execute(
+                    text("SELECT set_config('ringsentinel.human_review','on',true)")
+                )
+                db.execute(
+                    text(
+                        "UPDATE clusters SET status = 'pending'::cluster_status "
+                        "WHERE id = :cid"
+                    ),
+                    {"cid": str(decided[0])},
+                )
+                savepoint.rollback()
+                print(f"   {FAIL} a decision was revised - the audit log would disagree")
+                problems.append("recorded decision is mutable")
+            except Exception:
+                savepoint.rollback()
+                print(f"   {OK} refused, even inside a human review transaction")
 
         print("\n5. audit_log remains append-only:")
         row = db.execute(text("SELECT id FROM audit_log ORDER BY id DESC LIMIT 1")).first()

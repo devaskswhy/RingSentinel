@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.routers.clusters import router as clusters_router
-from app.routers.evaluation import router as evaluation_router
+from app.routers.evaluation import metrics_router, router as evaluation_router
 from app.webhooks import router as webhooks_router
 
 settings = get_settings()
@@ -37,6 +37,7 @@ app.add_middleware(
 app.include_router(webhooks_router)
 app.include_router(clusters_router)
 app.include_router(evaluation_router)
+app.include_router(metrics_router)
 
 EXPECTED_TABLES = (
     "entities",

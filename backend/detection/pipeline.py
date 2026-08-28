@@ -29,7 +29,14 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.models import AuditActor, AuditLog, CadenceClass, Cluster, ClusterMember
+from app.models import (
+    AuditActor,
+    AuditLog,
+    CadenceClass,
+    Cluster,
+    ClusterMember,
+    ClusterStatus,
+)
 from detection.baseline import TimingBaseline, population_baseline
 from detection.clustering import find_clusters
 from detection.config import DetectorConfig
@@ -120,6 +127,26 @@ def cluster_fingerprint(customer_ids: list[uuid.UUID]) -> str:
     return hashlib.sha256(joined.encode()).hexdigest()[:32]
 
 
+def triage_status(score: float, config: DetectorConfig) -> ClusterStatus:
+    """Which pre-decision state a newly flagged cluster starts in.
+
+    Both outcomes mean "a human still has to look at this" - neither is a
+    decision and neither touches a customer:
+
+      pending       flagged, and the detector is confident in the evidence
+      needs_review  flagged, but the score sits in the ambiguous band where
+                    detection depends on where the threshold was placed
+
+    `cleared` and `dismissed` are the decisions, and remain unreachable from
+    here - the database trigger refuses them outside a human review action.
+    Marking a cluster `needs_review` is the detector declining to assert
+    something it cannot support, which is the opposite of deciding.
+    """
+    if score >= config.confident_score_threshold:
+        return ClusterStatus.pending
+    return ClusterStatus.needs_review
+
+
 _CADENCE_TO_ENUM = {
     "human_like": CadenceClass.human_like,
     "agent_like": CadenceClass.agent_like,
@@ -130,7 +157,10 @@ _CADENCE_TO_ENUM = {
 def _persist(db: Session, run: DetectionRun) -> None:
     """Write flagged clusters, replacing only previously-pending ones."""
     preserved = db.execute(
-        text("SELECT count(*) FROM clusters WHERE status <> 'pending'")
+        text(
+            "SELECT count(*) FROM clusters "
+            "WHERE status NOT IN ('pending', 'needs_review')"
+        )
     ).scalar_one()
     run.preserved_reviewed = int(preserved)
 
@@ -156,7 +186,7 @@ def _persist(db: Session, run: DetectionRun) -> None:
     stale = [
         cid
         for fp, (cid, st) in existing.items()
-        if st == "pending" and fp not in flagged_fingerprints
+        if st in ("pending", "needs_review") and fp not in flagged_fingerprints
     ]
     if stale:
         db.execute(
@@ -187,6 +217,19 @@ def _persist(db: Session, run: DetectionRun) -> None:
                     "cid": str(cluster_id),
                 },
             )
+            # Refresh triage only while the cluster is still undecided. Once
+            # a human has ruled, the row is theirs and the trigger enforces it.
+            if prior[1] in ("pending", "needs_review"):
+                db.execute(
+                    text(
+                        "UPDATE clusters SET status = CAST(:s AS cluster_status) "
+                        "WHERE id = :cid"
+                    ),
+                    {
+                        "s": triage_status(item.score, run.config).value,
+                        "cid": str(cluster_id),
+                    },
+                )
             db.execute(
                 text("DELETE FROM cluster_members WHERE cluster_id = :cid"),
                 {"cid": str(cluster_id)},
@@ -202,8 +245,9 @@ def _persist(db: Session, run: DetectionRun) -> None:
                     evidence_json=item.to_evidence(run.config),
                     detector_version=run.config.version,
                     fingerprint=fingerprint,
-                    # status defaults to 'pending'. Never set here - only a
-                    # human review action may move it.
+                    # Triage only: pending or needs_review. A terminal status
+                    # is never set here - see triage_status().
+                    status=triage_status(item.score, run.config),
                 )
             )
         # Members are the accounts AND the shared attributes that implicated

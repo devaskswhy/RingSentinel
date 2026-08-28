@@ -168,6 +168,60 @@ export interface Scorecard {
   };
 }
 
+export interface HeldOutMetrics {
+  split: string;
+  run_at: string;
+  detector_version: string;
+  score_threshold: number;
+  confident_threshold: number;
+  source: string;
+  headline: {
+    precision: number;
+    precision_unit: string;
+    recall: number;
+    recall_unit: string;
+    false_positive_cost_inr: number;
+  };
+  confusion: {
+    true_positives_clusters: number;
+    false_positives_clusters: number;
+    false_negatives_rings: number;
+    rings_total: number;
+    rings_detected: number;
+    clusters_flagged: number;
+    match_rule: string;
+  };
+  needs_review: {
+    count: number;
+    band: [number, number];
+    note: string;
+    clusters: {
+      score: number;
+      size: number;
+      cadence: string;
+      headline: string;
+      reason: string;
+    }[];
+  };
+  cost: {
+    certain_review_cost_inr: number;
+    contingent_trust_cost_inr: number;
+    total_inr: number;
+    review_cost_per_fp_inr: number;
+    note: string;
+  };
+  cost_model: {
+    assumptions: Record<string, unknown>;
+    derived: Record<string, number>;
+  };
+  live_review_state: {
+    queue: Record<string, number>;
+    approved_false_positives: number;
+    contingent_trust_cost_inr: number;
+    note: string;
+  };
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
   if (!res.ok) {
@@ -205,6 +259,10 @@ export const api = {
   getCluster: (id: string) => get<ClusterDetail>(`/clusters/${id}`),
 
   scorecard: () => get<Scorecard>("/eval/scorecard"),
+
+  /** Held-out evaluation numbers. Defaults to the stored snapshot. */
+  metrics: (split = "holdout") =>
+    get<HeldOutMetrics>(`/metrics?split=${split}`),
 
   generateCaseFile: (id: string, force = false) =>
     post<{ created: boolean; reused_cache: boolean }>(

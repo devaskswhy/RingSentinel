@@ -24,6 +24,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from evaluation.cost import build_cost_model, describe
+from evaluation.metrics import compute_metrics, latest_stored
 
 router = APIRouter(prefix="/eval", tags=["evaluation"])
 
@@ -139,7 +141,9 @@ def scorecard(db: Session = Depends(get_db)) -> dict:
         ).all()
     )
     total_clusters = sum(status_counts.values())
-    reviewed = total_clusters - status_counts.get("pending", 0)
+    reviewed = total_clusters - status_counts.get("pending", 0) - status_counts.get(
+        "needs_review", 0
+    )
 
     # ---- "needs more data" exceptions --------------------------------------
     needs_more = [
@@ -235,4 +239,104 @@ def scorecard(db: Session = Depends(get_db)) -> dict:
                 "was useful."
             ),
         },
+    }
+
+
+
+# ---------------------------------------------------------------------------
+# GET /metrics — the Phase 6 headline numbers
+# ---------------------------------------------------------------------------
+
+metrics_router = APIRouter(tags=["evaluation"])
+
+
+@metrics_router.get("/metrics")
+def metrics(
+    split: str = "holdout",
+    recompute: bool = False,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Precision, recall, false-positive cost, and the exception list.
+
+    Serves the stored snapshot from the last recorded evaluation run by default.
+    Storing rather than always recomputing is the point: a number that has been
+    reported should not silently change because someone edited a threshold
+    afterwards. `?recompute=true` runs the detector again and returns fresh
+    numbers without writing them.
+
+    `split=holdout` is the honest one — rings 9-12, never used for tuning.
+    """
+    if not recompute:
+        stored = latest_stored(db, split)
+        if stored is not None:
+            stored["source"] = "stored snapshot from the recorded evaluation run"
+            stored["live_review_state"] = _live_review_state(db)
+            return stored
+
+    computed = compute_metrics(db, split)
+    payload = computed.to_dict()
+    payload["source"] = (
+        "recomputed live; not stored. Run scripts.report to record a snapshot."
+    )
+    payload["live_review_state"] = _live_review_state(db)
+    return payload
+
+
+def _live_review_state(db: Session) -> dict:
+    """Queue state right now, plus the contingent half of the cost model.
+
+    Kept apart from the benchmark numbers: this half needs no labels and would
+    work identically on real merchant data.
+    """
+    status_counts = dict(
+        db.execute(text("SELECT status::text, count(*) FROM clusters GROUP BY 1")).all()
+    )
+
+    # A false positive that a human APPROVED is the only path by which the
+    # contingent trust cost could ever be incurred.
+    approved_false = db.execute(
+        text(
+            """
+            SELECT count(*) FROM (
+                SELECT c.id,
+                       count(*) FILTER (
+                           WHERE t.is_synthetic_ring_id IS NOT NULL
+                       ) AS ring_txns
+                FROM clusters c
+                JOIN cluster_members m ON m.cluster_id = c.id
+                JOIN entities e ON e.id = m.entity_id AND e.type = 'customer'
+                LEFT JOIN transactions t ON t.customer_entity_id = e.id
+                WHERE c.status = 'cleared'
+                GROUP BY c.id
+                HAVING count(*) FILTER (
+                    WHERE t.is_synthetic_ring_id IS NOT NULL
+                ) = 0
+            ) x
+            """
+        )
+    ).scalar_one()
+
+    accounts_in_approved_false = 0
+    model = build_cost_model(
+        false_positives=max(1, approved_false),
+        accounts_in_false_positives=max(1, accounts_in_approved_false or approved_false),
+        approved_false_positives=approved_false,
+    )
+
+    return {
+        "queue": {
+            "pending": status_counts.get("pending", 0),
+            "needs_review": status_counts.get("needs_review", 0),
+            "approved": status_counts.get("cleared", 0),
+            "dismissed": status_counts.get("dismissed", 0),
+        },
+        "approved_false_positives": approved_false,
+        "contingent_trust_cost_inr": round(model.contingent_trust_cost_inr, 2)
+        if approved_false
+        else 0.0,
+        "note": (
+            "Queue state needs no ground-truth labels and would work the same on "
+            "real data. The contingent trust cost is non-zero only when a human "
+            "has approved a flag that was not a real ring."
+        ),
     }

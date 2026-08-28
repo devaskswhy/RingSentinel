@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-DETECTOR_VERSION = "0.4.0"
+DETECTOR_VERSION = "0.5.0"
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +170,30 @@ SHALLOW_ACCOUNT_MAX_TRANSACTIONS = 3
 #: below 0.25.
 SCORE_THRESHOLD = 0.30
 
+#: Above this, the detector considers itself confident. Between SCORE_THRESHOLD
+#: and this value a cluster is still flagged, but lands in `needs_review` rather
+#: than `pending`, and is reported as an exception rather than a finding.
+#:
+#: IMPORTANT: this does NOT change what gets flagged. SCORE_THRESHOLD is
+#: untouched at 0.30, so precision and recall are exactly what they were. The
+#: band only splits already-flagged clusters into confident and ambiguous.
+#:
+#: Justified from the TUNING sweep, which was run long before the held-out set
+#: was opened - not from the held-out numbers:
+#:
+#:   threshold 0.35 -> 8/8 rings      threshold 0.40 -> 6/8 rings
+#:
+#: Two tuning rings (0.370 and 0.376) sit below 0.40, so whether they are found
+#: at all depends on where the threshold is put. That is the working definition
+#: of ambiguous: a cluster whose detection is a function of the operator's
+#: choice rather than of the evidence. 0.45 sits just clear of that transition,
+#: above every benign cluster ever observed on either split.
+#:
+#: Consequence, stated plainly: three of the twelve seeded rings fall in this
+#: band. The detector is telling the truth about being unsure of them, which is
+#: more useful to a reviewer than a confident-looking score would be.
+CONFIDENT_SCORE_THRESHOLD = 0.45
+
 
 @dataclass(frozen=True)
 class DetectorConfig:
@@ -204,6 +228,7 @@ class DetectorConfig:
     shallow_account_max_transactions: int = SHALLOW_ACCOUNT_MAX_TRANSACTIONS
 
     score_threshold: float = SCORE_THRESHOLD
+    confident_score_threshold: float = CONFIDENT_SCORE_THRESHOLD
     version: str = DETECTOR_VERSION
 
     def __post_init__(self) -> None:

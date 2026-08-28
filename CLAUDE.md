@@ -31,8 +31,8 @@ and every decision is written to an append-only audit log.
 | # | Invariant | How it is enforced |
 |---|---|---|
 | 1 | No automated blocking, freezing, or declining of any customer | No code path may call a block/decline action. Clusters only ever change `status`, and only from a human review action. |
-| 2 | Every flag is human-reviewed | `clusters.status` starts at `pending` and only a human action moves it to `cleared` / `dismissed` / `needs_review`. |
-| 3 | Every decision is logged and never rewritten | `audit_log` is append-only, enforced by a Postgres trigger that raises on UPDATE / DELETE / TRUNCATE. |
+| 2 | Every **decision** is human-made | The detector may triage between `pending` and `needs_review` — both mean "a human still has to look at this". Only a human review action may record a **decision** (`cleared` / `dismissed`), and once recorded it can never be revised. Enforced by `trg_clusters_status_human_only` (migration 0005). |
+| 3 | Every decision is logged and never rewritten | `audit_log` is append-only (trigger raises on UPDATE / DELETE / TRUNCATE), and a decided cluster's status is itself immutable — otherwise the row could contradict the log. |
 | 4 | The detector never sees ground truth | `transactions.is_synthetic_ring_id` is an evaluation label only. Detection code reads the `v_transactions_detector` view, which does not contain the column. |
 | 5 | Razorpay is TEST MODE only | Keys must start with `rzp_test_`; `Settings.razorpay_is_test_mode` gates usage. A live key (`rzp_live_`) must never appear in this repo, in any env file, or in any log. |
 | 6 | Claude explains, humans decide | Claude writes case files and reasoning. Claude never sets a final status. Its actions are logged with `actor = 'claude'`. |
@@ -192,6 +192,8 @@ All are called out above and are easy to remove if unwanted:
 7. `clusters.fingerprint` (migration 0004) — without a stable identity across
    runs, `detect` destroyed every pending cluster's case files and duplicated
    already-reviewed groups.
+8. `evaluation_runs` table (migration 0005) — a reported metric must not change
+   because a threshold was edited afterwards, so snapshots are stored.
 
 Plus two enforcement mechanisms not requested but consistent with the brief: the
 append-only trigger, and the `v_transactions_detector` view.
@@ -746,6 +748,113 @@ matching row in place and leaves status, case files, and audit history intact.
 
 ---
 
+## 5e. Phase 6 — honest scoring
+
+### ⚠️ The held-out set had already been opened
+
+The Phase 6 brief asked to run the held-out split "for the first time". It had
+already been run, at the user's instruction, at commit `8ee5955`. This run is a
+**reproduction**, and it reproduced exactly: 4/4 rings, 0 false flags, identical
+scores.
+
+What makes the numbers still trustworthy is that nothing was tuned in between.
+`detection/config.py`, `scoring.py`, `baseline.py`, `cadence.py`, `clustering.py`
+and `graph.py` were verified **byte-identical to commit `0762abe`** before the
+re-run. Only `pipeline.py` changed, and only in how clusters are persisted.
+
+### Held-out result
+
+| Metric | Value | Unit |
+|---|---|---|
+| Precision | **100%** | clusters — 4 of 4 flagged were real |
+| Recall | **100%** | rings — 4 of 4 seeded rings found |
+| False-positive cost | **₹0** | 0 false positives |
+| Exceptions | **1** | scored inside the ambiguous band |
+| Cadence correct | 4/4 | |
+| Clean accounts swept in | 0 of 105 | |
+
+**Precision and recall are counted in different units on purpose.** Precision is
+per *cluster*, because analyst time is spent per cluster. Recall is per *ring*,
+because the question is how many real rings exist that we found. A single
+blended F1 would be tidier and would mean less.
+
+### The ambiguous band
+
+`CONFIDENT_SCORE_THRESHOLD = 0.45`. Clusters scoring in **[0.30, 0.45)** are
+flagged but land in `needs_review` rather than `pending`, and are reported as
+exceptions rather than findings.
+
+Justified from the **tuning** sweep, run long before the held-out set was
+opened: at 0.35 recall was 8/8, at 0.40 it was 6/8. Two tuning rings sit below
+0.40, so whether they are found depends on where the threshold is placed rather
+than on the strength of the evidence. That is the working definition of
+ambiguous. 0.45 sits just clear of that transition.
+
+**This does not change what gets flagged.** `SCORE_THRESHOLD` is untouched at
+0.30, so precision and recall are exactly what they were. The band only splits
+already-flagged clusters into confident and ambiguous.
+
+### `needs_review` versus invariant #2
+
+The brief asked the detector to assign `needs_review`, which the Phase 4 trigger
+forbade. The resolution is that `needs_review` is **triage, not a decision**:
+
+| Status | Meaning | Who may set it |
+|---|---|---|
+| `pending` | flagged, detector confident | detector |
+| `needs_review` | flagged, detector unsure | detector |
+| `cleared` / `dismissed` | **a decision** | humans only, once, forever |
+
+Migration `0005` rewrites the guard accordingly, and it is strictly **stronger**
+than before: it still refuses any automated move into a terminal state, and it
+now also refuses to move a cluster *out* of one — a recorded decision cannot be
+revised even inside a human review transaction, because the audit log would then
+disagree with the row. `scripts/verify_human_gate.py` check 4b proves it.
+
+### False-positive cost model — all estimates
+
+In `evaluation/cost.py`, decomposed into two parts that are never merged:
+
+| Part | Certain? | Value |
+|---|---|---|
+| Review cost | **Yes** | ₹240 per false positive (12 min × ₹1,200/hr) |
+| Trust cost | **Contingent** | ₹3,500 per wrongly-gated account |
+
+The trust cost is contingent for a specific reason: **RingSentinel never gates
+an account**. It can only be incurred if a human approves a false flag *and* a
+downstream process then acts. Modelling it anyway is the honest choice — "our
+tool cannot cause harm" is not the same as "flagging carries no risk" — but
+merging it into the certain cost would inflate the headline figure.
+
+Every input is an estimate, exposed through `/metrics` and the report so a reader
+can disagree with each one individually.
+
+### Where the detector is weakest
+
+Derived from the numbers by `scripts/report.py`, not written by hand:
+
+- **Human-cadence rings score materially lower than agent-cadence ones** (0.503
+  vs 0.776 on held-out). The timing signal contributes almost nothing when a ring
+  is operated by people, so those rings rest on attribute reuse alone and sit
+  closer to the threshold.
+- **Address-only rings are the hardest class.** Address is weighted 0.40
+  precisely because households share addresses; that is deliberate, and it means
+  such rings are the hardest to justify flagging.
+
+### Commands
+
+```bash
+docker compose exec backend python -m scripts.report                   # print
+docker compose exec backend python -m scripts.report --store           # and record
+curl localhost:8000/metrics                    # stored snapshot
+curl 'localhost:8000/metrics?recompute=true'   # fresh, unstored
+```
+
+Snapshots are stored in `evaluation_runs` so a reported number cannot silently
+change because someone edited a threshold afterwards.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -810,6 +919,7 @@ docker compose exec backend alembic upgrade head
 | **4** | Claude Agent SDK case files + human-gated approve/dismiss API, with a DB trigger enforcing the gate. | **Done** |
 | **eval** | Held-out evaluation on rings 9-12, run once with the Phase 3 config: 4/4 rings, 0 false flags | **Done** |
 | **5** | Frontend: landing page (Lenis + GSAP scroll sequence) and review console (queue, case files, graph, scorecard, audit) | **Done** |
+| **6** | Honest scoring: held-out precision/recall, FP cost model, ambiguous band as `needs_review`, `/metrics`, `scripts/report.py` | **Done** |
 
 **Phase 1 constraints that were deliberately honoured:** no fake/mock data, no
 UI beyond a placeholder page, no detection logic. Do not "helpfully" add these
