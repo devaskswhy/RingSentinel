@@ -176,11 +176,14 @@ makes invariant #4 a property of the database rather than a matter of
 discipline.
 
 ### Deviations from the brief, in one place
-Three additions were made because the schema as literally specified could not
-function. All three are called out above and are easy to remove if unwanted:
+Additions made because the schema as literally specified could not function.
+All are called out above and are easy to remove if unwanted:
 1. `entities.external_ref` — without it, shared-attribute detection is impossible.
 2. `cluster_members` — without it, a cluster cannot name the entities it flags.
 3. `transactions.currency` — Razorpay returns it; storing it avoids a silent INR assumption.
+4. `clusters.evidence_json` / `.cadence` / `.detector_version` (migration 0002) —
+   Phase 3 requires every score to be explainable, and `(id, status, score,
+   created_at)` has nowhere to record which attributes drove the score.
 
 Plus two enforcement mechanisms not requested but consistent with the brief: the
 append-only trigger, and the `v_transactions_detector` view.
@@ -338,6 +341,127 @@ by `generator/normal.py`.
 
 ---
 
+## 5b. Phase 3 — detection
+
+### How ground-truth isolation survives "run against the tuning split only"
+
+These two requirements pull against each other: you cannot select the tuning
+split without reading `is_synthetic_ring_id`, which the detector must never see.
+
+The resolution is a package boundary:
+
+| Package | May read labels? | Role |
+|---|---|---|
+| `detection/` | **No** | Builds the graph, clusters, scores. Reads `v_transactions_detector` only. |
+| `evaluation/` | Yes | Selects splits, measures recall/precision against ground truth. |
+
+`evaluation/splits.py` reads the labels, works out which transaction ids are out
+of scope, and passes the detector an **opaque set of ids to exclude**. The
+detector is never told what a split is.
+
+`scripts/verify_detector_isolation.py` enforces this mechanically. It walks the
+AST of every module under `detection/` — deliberately not a grep, because
+`graph.py` legitimately *mentions* the column in a docstring — and fails if any
+executable string literal names `is_synthetic_ring_id` or queries the base
+`transactions` table, or if any module imports `evaluation.*`.
+
+### The four signals
+
+Tunables all live in `detection/config.py`. Nothing numeric is buried in the
+scoring code.
+
+| Signal | Weight | What it measures |
+|---|---|---|
+| Attribute reuse | 0.45 | How many distinct accounts funnel through one device / instrument / address, weighted by type |
+| Timing regularity | 0.25 | How metronomic and how fast, versus the population baseline |
+| Concentration | 0.15 | Share of the cluster's volume flowing through the shared attributes |
+| Account shallowness | 0.15 | Fraction of accounts with almost no transaction history |
+
+**Attribute type weights are the point**: instrument 1.00, device 0.85, address
+**0.40**. A shared delivery address is a household far more often than a crew, so
+address overlap alone cannot flag a cluster.
+
+Reuse saturates as `f(k) = (k-1)/(k-1+2)`, so the jump from 2 to 4 accounts on
+one card counts for far more than 20 to 22. Per-attribute contributions combine
+with a probabilistic soft-OR, so independent evidence stacks without exceeding 1.
+
+### Three findings from calibration, each of which was a bug first
+
+1. **The hub filter was deleting a real ring.** Dropping attributes touched by
+   >5% of accounts meant a limit of 8 on a 173-account graph — and ring_04 is a
+   genuine 9-account ring. Fixed with `HUB_ATTRIBUTE_MIN_CUSTOMERS = 25`, an
+   absolute floor well clear of plausible ring sizes; the percentage only takes
+   over on a large graph.
+
+2. **Velocity swamped regularity.** The baseline median gap is ~32 hours (normal
+   shoppers buy every few days), so *any* burst saturated the velocity signal at
+   1.0 and timing stopped discriminating — human-cadence clusters were scoring
+   1.00 on it. Regularity now carries 0.80 of the timing signal: measured on this
+   corpus, agent rings sit at CV 0.04, human rings 0.96, baseline 0.76.
+
+3. **A pair is not a ring.** With the shared-attribute floor at 2 accounts, the
+   soft-OR let several unrelated *pairs* accumulate to reuse 0.85. Floor raised
+   to 3. Pairs still appear in the evidence, they just do not drive the score.
+
+### Why account shallowness exists
+
+After the first three fixes, the weakest genuine ring (ring_08, promo farming on
+a shared address, 0.270) and the strongest benign cluster (a household trio on
+one device, 0.250) sat **0.02 apart**. No threshold survives a gap that narrow —
+it would be fitting noise, not signal.
+
+Shallowness separates them structurally instead. Promo-farming sock puppets exist
+to place one discounted order, so they have 1–3 transactions each; people who
+genuinely share a device have real histories. That is a standard promo-abuse
+signal, not a corpus artefact. It is weak on its own by design — at 0.15 it can
+tip an already-suspicious cluster over the line but can never flag one alone.
+
+Margin after adding it: weakest true ring **0.371**, strongest benign cluster
+below 0.25.
+
+### The threshold was measured, not guessed
+
+`SCORE_THRESHOLD = 0.30`, chosen from the sweep on the tuning split:
+
+| Threshold | Rings found | False flags |
+|---|---|---|
+| 0.20 | 8/8 | 1 |
+| **0.25 – 0.35** | **8/8** | **0** |
+| 0.40+ | 6/8 | 0 |
+
+0.30 is the centre of the stable plateau, so it has the most room on both sides
+before behaviour changes — which is what should survive the held-out rings.
+
+### Results on the tuning split (rings 1–8)
+
+| Metric | Result |
+|---|---|
+| Rings detected | **8/8 (100%)** |
+| Cadence classified correctly | **8/8** |
+| False flags | **0 (100% precision)** |
+| Normal accounts swept in | **0 of 105 (0.0%)** |
+| Runtime | 0.04s, deterministic across runs |
+
+Rings 9–12 remain **untouched**. `--split holdout` warns loudly.
+
+### Persistence
+
+Clusters are written with `status = 'pending'` — nothing here ever sets a
+terminal status or restricts an account (invariants #1, #2). Re-running replaces
+only *pending* clusters and preserves anything a human has already actioned;
+verified by clearing a cluster, re-running, and confirming 7 replaced / 1
+preserved.
+
+Migration `0002` adds three columns to `clusters`, because `(id, status, score,
+created_at)` had nowhere to record *why* a cluster was flagged:
+
+- `evidence_json` — per-signal values, weights, weighted contributions, and the
+  specific shared-attribute entity ids and external refs that drove them
+- `cadence` — enum `human_like | agent_like | inconclusive`
+- `detector_version` — so results stay traceable across threshold changes
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -354,6 +478,18 @@ docker compose exec backend python -m scripts.seed_rings --reset     # full corp
 
 # Ingest pipeline self-test (rolls back; safe against a populated database)
 docker compose exec backend python -m scripts.verify_ingest
+
+# Phase 3 - detection
+docker compose exec backend python -m scripts.detect                      # tuning split
+docker compose exec backend python -m scripts.detect --no-persist         # dry run
+docker compose exec backend python -m scripts.detect --explain 1          # full evidence
+docker compose exec backend python -m scripts.detect --show-below         # near misses
+
+# Measure against ground truth (evaluation only - reads labels)
+docker compose exec backend python -m scripts.evaluate_detection --sweep
+
+# Prove the detector cannot see ground truth (invariant #4)
+docker compose exec backend python -m scripts.verify_detector_isolation
 ```
 
 - Frontend → http://localhost:3000
@@ -377,7 +513,7 @@ docker compose exec backend alembic upgrade head
 |---|---|---|
 | **1** | Monorepo scaffold, Docker Compose, entity-graph schema + migration, env template, README | **Done** |
 | **2** | Razorpay test-mode ingest + synthetic ring generator: 6 archetypes, 12 rings, webhook ingestion path | **Done** |
-| **3** | NetworkX detection: build graph from `entity_links`, find dense components, score, write `clusters` + `cluster_members`. **Reads `v_transactions_detector`, never the base table.** | Not started |
+| **3** | NetworkX detection: graph build, clustering, 4-signal scoring, cadence classification. 8/8 tuning rings, 0 false flags. | **Done** |
 | **4** | Claude Agent SDK case files for each cluster. Auth path already verified. | Not started |
 | **5** | Review UI: cluster queue, case file display, approve/dismiss, audit trail view | Not started |
 

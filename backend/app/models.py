@@ -33,6 +33,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -73,10 +74,19 @@ class AuditActor(str, enum.Enum):
     human = "human"
 
 
+class CadenceClass(str, enum.Enum):
+    """How a cluster's inter-transaction rhythm reads. Set by the Phase 3 detector."""
+
+    human_like = "human_like"
+    agent_like = "agent_like"
+    inconclusive = "inconclusive"
+
+
 entity_type_enum = SAEnum(EntityType, name="entity_type", native_enum=True)
 link_type_enum = SAEnum(LinkType, name="link_type", native_enum=True)
 cluster_status_enum = SAEnum(ClusterStatus, name="cluster_status", native_enum=True)
 audit_actor_enum = SAEnum(AuditActor, name="audit_actor", native_enum=True)
+cadence_class_enum = SAEnum(CadenceClass, name="cadence_class", native_enum=True)
 
 
 # --------------------------------------------------------------------------
@@ -231,7 +241,28 @@ class Cluster(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    __table_args__ = (Index("ix_clusters_status", "status"),)
+    # Added in migration 0002. The brief requires every score to be explainable,
+    # and (id, status, score, created_at) alone has nowhere to record why.
+    cadence: Mapped[CadenceClass] = mapped_column(
+        cadence_class_enum,
+        nullable=False,
+        server_default=CadenceClass.inconclusive.value,
+    )
+    #: Full score breakdown: per-signal contributions and the specific shared
+    #: attribute entities that drove them.
+    evidence_json: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )
+    #: Which scoring configuration produced this row, so results stay traceable
+    #: across threshold changes.
+    detector_version: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=""
+    )
+
+    __table_args__ = (
+        Index("ix_clusters_status", "status"),
+        Index("ix_clusters_status_score", "status", text("score DESC")),
+    )
 
 
 class ClusterMember(Base):
