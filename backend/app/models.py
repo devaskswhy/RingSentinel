@@ -273,9 +273,14 @@ class Cluster(Base):
     detector_version: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=""
     )
+    #: Stable identity across detection runs - a hash of the cluster's customer
+    #: accounts. Lets a re-run update a cluster in place instead of deleting it
+    #: and losing its case files and review history. See migration 0004.
+    fingerprint: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_clusters_status", "status"),
+        Index("ix_clusters_fingerprint", "fingerprint"),
         Index("ix_clusters_status_score", "status", text("score DESC")),
     )
 

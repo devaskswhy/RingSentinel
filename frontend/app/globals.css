@@ -1,12 +1,148 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Design tokens. Defined once here, mirrored in lib/tokens.ts for GSAP.
+   Both the landing page and the console read from these — that shared
+   vocabulary is what makes two very different surfaces feel like one product.
+   --------------------------------------------------------------------------- */
+
 :root {
-  --background: #0b0f14;
-  --foreground: #e6edf3;
+  /* One accent. There is no second one, on purpose. */
+  --accent: #2dd4bf;
+  --accent-dim: #14b8a6;
+  --accent-glow: rgba(45, 212, 191, 0.14);
+
+  /* Near-black, warmed very slightly so it does not read as pure #000. */
+  --ink: #08090a;
+  --ink-raised: #0e1012;
+  --ink-panel: #121517;
+  --ink-hover: #171b1e;
+
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+
+  --text: #e8eaed;
+  --text-muted: #9aa1a8;
+  --text-faint: #656c73;
+
+  /* Type scale — 1.25 ratio from a 16px base. */
+  --step--1: 0.8rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.563rem;
+  --step-3: 1.953rem;
+  --step-4: 2.441rem;
+  --step-5: 3.052rem;
+  --step-6: 4.2rem;
+  --step-7: 5.8rem;
+
+  --ease: cubic-bezier(0.65, 0, 0.35, 1); /* CSS mirror of power3.inOut */
+  --dur-fast: 0.25s;
+  --dur-slow: 1s;
+
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  /* Lenis drives scrolling on the landing page; native smooth scroll would
+     fight it. The console uses ordinary scrolling. */
+  scroll-behavior: auto;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0;
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+/* Scrollbar, console-side. Thin and out of the way. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--ink); }
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 5px;
+  border: 2px solid var(--ink);
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+
+/* ---------------------------------------------------------------------------
+   Reduced motion. Pinning and long transitions are disabled in JS as well —
+   this is the belt to that braces.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Small shared primitives
+   --------------------------------------------------------------------------- */
+
+.rs-mono {
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  letter-spacing: -0.01em;
+}
+
+.rs-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.rs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+/* Only transform and opacity animate anywhere in this app — never geometry.
+   Layout-affecting properties cause reflow, which the console cannot afford
+   given how often it re-renders. */
+.rs-anim {
+  will-change: transform, opacity;
+}
+
+.rs-focus:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

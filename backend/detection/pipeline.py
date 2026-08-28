@@ -19,6 +19,8 @@ Every run appends to `audit_log` with `actor = 'system'`.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -46,8 +48,12 @@ class DetectionRun:
     baseline: TimingBaseline
     bundle: GraphBundle
     config: DetectorConfig
+    #: Purely descriptive label for the audit log, e.g. "tuning". The detector
+    #: never branches on it - scope is applied through the opaque exclusion set.
+    scope_label: str = "all"
     persisted_ids: dict[int, uuid.UUID] = field(default_factory=dict)
     deleted_pending: int = 0
+    updated_existing: int = 0
     preserved_reviewed: int = 0
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     elapsed_seconds: float = 0.0
@@ -66,6 +72,7 @@ def run_detection(
     config: DetectorConfig | None = None,
     exclude_transaction_ids: set[uuid.UUID] | None = None,
     persist: bool = True,
+    scope_label: str = "all",
 ) -> DetectionRun:
     """Run one full detection pass.
 
@@ -91,6 +98,7 @@ def run_detection(
         baseline=baseline,
         bundle=bundle,
         config=config,
+        scope_label=scope_label,
     )
 
     if persist:
@@ -98,6 +106,18 @@ def run_detection(
 
     run.elapsed_seconds = time.monotonic() - started
     return run
+
+
+def cluster_fingerprint(customer_ids: list[uuid.UUID]) -> str:
+    """Stable identity for a cluster: a hash of its sorted customer accounts.
+
+    Attribute nodes are excluded deliberately. A ring's accounts are what a
+    reviewer decides about; which particular device the crew happened to use in
+    the last window is incidental, and including it would break the match every
+    time the cluster picked up one extra shared attribute.
+    """
+    joined = "|".join(sorted(str(c) for c in customer_ids))
+    return hashlib.sha256(joined.encode()).hexdigest()[:32]
 
 
 _CADENCE_TO_ENUM = {
@@ -114,25 +134,78 @@ def _persist(db: Session, run: DetectionRun) -> None:
     ).scalar_one()
     run.preserved_reviewed = int(preserved)
 
-    # cluster_members cascades on delete.
-    deleted = db.execute(
-        text("DELETE FROM clusters WHERE status = 'pending'")
-    ).rowcount
-    run.deleted_pending = int(deleted or 0)
-
-    for index, item in enumerate(run.flagged):
-        cluster_id = uuid.uuid4()
-        db.add(
-            Cluster(
-                id=cluster_id,
-                score=round(item.score, 6),
-                cadence=_CADENCE_TO_ENUM[item.cadence.classification],
-                evidence_json=item.to_evidence(run.config),
-                detector_version=run.config.version,
-                # status defaults to 'pending'. Never set here - only a human
-                # review action may move it.
+    # Existing clusters keyed by fingerprint, so a re-run can update in place
+    # rather than delete and re-insert. Updating preserves the cluster's status,
+    # its case files, and its audit history.
+    existing = {
+        row.fingerprint: (row.id, row.status)
+        for row in db.execute(
+            text(
+                "SELECT id, fingerprint, status::text AS status FROM clusters "
+                "WHERE fingerprint IS NOT NULL"
             )
         )
+    }
+
+    flagged_fingerprints = {
+        cluster_fingerprint(item.candidate.customers) for item in run.flagged
+    }
+
+    # Retire only pending clusters that are no longer flagged at all. Anything a
+    # human has actioned stays, and anything still flagged is updated below.
+    stale = [
+        cid
+        for fp, (cid, st) in existing.items()
+        if st == "pending" and fp not in flagged_fingerprints
+    ]
+    if stale:
+        db.execute(
+            text("DELETE FROM clusters WHERE id = ANY(:ids)"),
+            {"ids": [str(c) for c in stale]},
+        )
+    run.deleted_pending = len(stale)
+
+    for index, item in enumerate(run.flagged):
+        fingerprint = cluster_fingerprint(item.candidate.customers)
+        prior = existing.get(fingerprint)
+
+        if prior is not None:
+            # Same accounts as a cluster we already know about. Refresh the
+            # detector's view of it; never touch status - that is the human's.
+            cluster_id = prior[0]
+            db.execute(
+                text(
+                    "UPDATE clusters SET score = :score, cadence = CAST(:cad AS cadence_class), "
+                    "evidence_json = CAST(:ev AS jsonb), detector_version = :ver "
+                    "WHERE id = :cid"
+                ),
+                {
+                    "score": round(item.score, 6),
+                    "cad": item.cadence.classification,
+                    "ev": json.dumps(item.to_evidence(run.config)),
+                    "ver": run.config.version,
+                    "cid": str(cluster_id),
+                },
+            )
+            db.execute(
+                text("DELETE FROM cluster_members WHERE cluster_id = :cid"),
+                {"cid": str(cluster_id)},
+            )
+            run.updated_existing += 1
+        else:
+            cluster_id = uuid.uuid4()
+            db.add(
+                Cluster(
+                    id=cluster_id,
+                    score=round(item.score, 6),
+                    cadence=_CADENCE_TO_ENUM[item.cadence.classification],
+                    evidence_json=item.to_evidence(run.config),
+                    detector_version=run.config.version,
+                    fingerprint=fingerprint,
+                    # status defaults to 'pending'. Never set here - only a
+                    # human review action may move it.
+                )
+            )
         # Members are the accounts AND the shared attributes that implicated
         # them, so a reviewer can see the whole picture from cluster_members.
         member_ids = list(item.candidate.customers) + [
@@ -143,9 +216,10 @@ def _persist(db: Session, run: DetectionRun) -> None:
 
         run.persisted_ids[index] = cluster_id
 
-        # Per-cluster flag event. The run-level row below records the pass as a
-        # whole; this one makes each cluster's own history complete, so
-        # GET /clusters/{id} can show flagged -> case file -> decision.
+        # Per-cluster flag event, only for clusters seen for the first time.
+        # Re-flagging an existing cluster every run would bury its real history.
+        if prior is not None:
+            continue
         db.add(
             AuditLog(
                 actor=AuditActor.system,
@@ -183,10 +257,12 @@ def _persist(db: Session, run: DetectionRun) -> None:
             target_type="detector",
             target_id=run.config.version,
             detail_json={
+                "scope_label": run.scope_label,
                 "candidates_examined": len(run.scored),
                 "clusters_flagged": len(run.flagged),
                 "score_threshold": run.config.score_threshold,
-                "pending_clusters_replaced": run.deleted_pending,
+                "stale_pending_removed": run.deleted_pending,
+                "existing_clusters_updated": run.updated_existing,
                 "reviewed_clusters_preserved": run.preserved_reviewed,
                 "graph_nodes": run.bundle.graph.number_of_nodes(),
                 "graph_edges": run.bundle.graph.number_of_edges(),

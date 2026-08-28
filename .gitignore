@@ -35,3 +35,6 @@ pgdata/
 
 # Empty stand-in for the optional Claude credential mount
 .claude-placeholder/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

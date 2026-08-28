@@ -107,6 +107,7 @@ def main() -> int:
             config=config,
             exclude_transaction_ids=excluded,
             persist=not args.no_persist,
+            scope_label=args.split,
         )
 
         if not args.no_persist:

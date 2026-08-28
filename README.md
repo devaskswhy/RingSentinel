@@ -122,7 +122,8 @@ Nothing in RingSentinel blocks, freezes, or restricts a customer account.
 
 | What | Where |
 |---|---|
-| Frontend | http://localhost:3000 |
+| Landing page | http://localhost:3000 |
+| Review console | http://localhost:3000/console |
 | API docs | http://localhost:8000/docs |
 | Liveness | http://localhost:8000/health |
 | Schema health | http://localhost:8000/health/db |

@@ -189,6 +189,9 @@ All are called out above and are easy to remove if unwanted:
 6. `trg_clusters_status_human_only` (migration 0003) — makes "no auto-execution"
    a property the database enforces rather than a convention code review has to
    catch.
+7. `clusters.fingerprint` (migration 0004) — without a stable identity across
+   runs, `detect` destroyed every pending cluster's case files and duplicated
+   already-reviewed groups.
 
 Plus two enforcement mechanisms not requested but consistent with the brief: the
 append-only trigger, and the `v_transactions_detector` view.
@@ -643,6 +646,106 @@ them. That is the point of the table.
 
 ---
 
+## 5d. Phase 5 — the frontend
+
+Two surfaces, deliberately built to different standards. They share tokens so
+they read as one product, and share almost nothing else.
+
+### Shared tokens
+
+`app/globals.css` holds the CSS custom properties; `lib/tokens.ts` mirrors the
+numeric half for GSAP, which needs real values rather than `var()` strings.
+
+| Token | Value |
+|---|---|
+| Accent | **`#2dd4bf`** — one accent, no second one |
+| Ink | `#08090a`, warmed slightly off pure black |
+| Easing | `power3.inOut` (CSS mirror: `cubic-bezier(.65,0,.35,1)`) |
+| Durations | `fast 0.25s` for UI, `slow 1.0s` for section transitions. Two speeds, not a spectrum |
+| Display face | Space Grotesk |
+| Body face | Inter |
+| Type scale | 1.25 ratio, `--step--1` … `--step-7` |
+
+Both faces are self-hosted through `next/font` — 20 woff2 files emitted, no
+runtime request to Google, no swap-in shift.
+
+### Surface A — `/`
+
+Lenis and GSAP wired as **one** scroll system, which is the part that usually
+goes wrong:
+
+```ts
+gsap.registerPlugin(ScrollTrigger);
+lenis.on("scroll", ScrollTrigger.update);      // ST recalculates when Lenis moves
+gsap.ticker.add((t) => lenis.raf(t * 1000));   // one RAF loop; GSAP gives seconds
+gsap.ticker.lagSmoothing(0);                   // don't rewrite elapsed time
+```
+
+Without those, Lenis interpolates on its own loop while ScrollTrigger samples
+`window.scrollY` on GSAP's — two clocks, and pinned sections lag or overshoot.
+
+Four beats: the problem → the mechanism → the gate → the way in. Only the first
+two are pinned and scrubbed, because that is where the argument is.
+
+The animation is **one set of eighteen dots throughout**. Scattered, they are
+eighteen individually-unremarkable transactions — exactly what a per-transaction
+model sees. On scroll, seven migrate into a ring around two shared attributes and
+the edges draw in. Nothing is added; the data was always that shape. That *is*
+the product thesis, so it seemed worth making the animation say it literally.
+
+Responsive behaviour uses `gsap.matchMedia()`, not a width check at mount, so
+toggling device emulation in devtools tears the pinned timeline down and
+re-runs the static path **without a reload**. Under `prefers-reduced-motion` or
+below 768px, the resolved state renders directly — no pinning, no scrub.
+
+Loader: a 0–100 counter held to ~1.9s, under the 2.5s ceiling, skipped entirely
+under reduced motion.
+
+### Surface B — `/console`
+
+No loader, no pinning, no scroll-driven anything. A reviewer opens this many
+times a day and wants the queue immediately. GSAP appears only for list
+entrances and panel swaps.
+
+- Dense sortable table: score bar, account count, cadence pill, status pill, evidence headline
+- Detail pane: case file, per-signal score breakdown, entity graph, audit trail
+- Approve / Dismiss, both refusing to submit without a reason
+- Live scorecard
+
+The graph is a **hand-rolled force layout** — repulsion, edge springs, weak
+centring — run to convergence once on mount rather than on a RAF loop. A console
+tab left open should not hold a CPU core, and a settled diagram is easier to
+point at during a review. No dependency, no WebGL.
+
+### The scorecard's two halves
+
+`GET /eval/scorecard` returns `detector_benchmark` and `review_operations`
+separately, and the UI keeps them visually apart. The benchmark half needs
+ground-truth labels and therefore **only exists on the synthetic corpus**;
+presenting it beside the operational numbers without that distinction would let
+a demo figure pass for a production one.
+
+### Performance rule, enforced everywhere
+
+Only `transform`, `opacity`, and `stroke-dashoffset` are animated. Never `top`,
+`left`, `width`, or `height`. This matters most on the console, which re-renders
+on every decision — animating geometry there would cost a reflow each time.
+
+### Cluster identity (migration 0004)
+
+Fixing this was a prerequisite, not a nicety. `_persist` used to delete every
+pending cluster and insert fresh rows, so **case files cascade-deleted with
+them** — a routine `detect` run silently threw away minutes of Claude output,
+and any group a human had already approved came back as a new pending duplicate.
+
+Clusters now carry a `fingerprint`: a hash of their customer accounts.
+Attribute nodes are excluded deliberately — a reviewer decides about accounts,
+and including whichever device the crew happened to use would break the match
+every time the cluster picked up one more shared attribute. A re-run updates the
+matching row in place and leaves status, case files, and audit history intact.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -706,7 +809,7 @@ docker compose exec backend alembic upgrade head
 | **3** | NetworkX detection: graph build, clustering, 4-signal scoring, cadence classification. 8/8 tuning rings, 0 false flags. | **Done** |
 | **4** | Claude Agent SDK case files + human-gated approve/dismiss API, with a DB trigger enforcing the gate. | **Done** |
 | **eval** | Held-out evaluation on rings 9-12, run once with the Phase 3 config: 4/4 rings, 0 false flags | **Done** |
-| **5** | Review UI: cluster queue, case file display, approve/dismiss, audit trail view | Not started |
+| **5** | Frontend: landing page (Lenis + GSAP scroll sequence) and review console (queue, case files, graph, scorecard, audit) | **Done** |
 
 **Phase 1 constraints that were deliberately honoured:** no fake/mock data, no
 UI beyond a placeholder page, no detection logic. Do not "helpfully" add these
