@@ -81,12 +81,25 @@ RingSentinel/
 │   │   ├── env.py         <- reads DATABASE_URL from the environment
 │   │   └── versions/0001_initial_entity_graph_schema.py
 │   ├── app/
-│   │   ├── config.py      <- pydantic-settings
-│   │   ├── db.py          <- engine + session
-│   │   ├── models.py      <- the entity-graph schema
-│   │   └── main.py        <- health endpoints only in Phase 1
+│   │   ├── config.py          <- pydantic-settings
+│   │   ├── db.py              <- engine + session
+│   │   ├── models.py          <- the entity-graph schema
+│   │   ├── main.py            <- health + /eval/corpus, mounts the webhook router
+│   │   ├── razorpay_client.py <- test-mode-only client: pacing, 429 retry
+│   │   ├── ingest.py          <- event -> entities/entity_links/transactions
+│   │   └── webhooks.py        <- POST /webhooks/razorpay, HMAC verification
+│   ├── generator/             <- Phase 2 synthetic corpus (pure, no network)
+│   │   ├── config.py          <- seed, ring specs, held-out split, volumes
+│   │   ├── identities.py      <- opaque token pools (no PII is ever created)
+│   │   ├── cadence.py         <- human vs agent timing models
+│   │   ├── archetypes.py      <- the six named archetype generators
+│   │   ├── normal.py          <- uncorrelated background traffic
+│   │   ├── planned.py         <- PlannedTransaction + Razorpay notes mapping
+│   │   └── plan.py            <- assembles the whole corpus
 │   └── scripts/
-│       ├── seed.py                 <- the one seed command
+│       ├── seed.py                 <- Phase 1 schema verification
+│       ├── seed_rings.py           <- Phase 2 end-to-end seed (the one command)
+│       ├── verify_ingest.py        <- ingest self-test, rolls back
 │       └── verify_claude_auth.py   <- Agent SDK auth check
 └── frontend/
     ├── Dockerfile
@@ -218,12 +231,99 @@ something hardcoded — both paths must work without code changes.
 
 ---
 
+## 5a. Phase 2 — synthetic corpus and ingest
+
+### The one rule about how data gets in
+
+**The generator never writes to Postgres.** It creates real Razorpay test-mode
+records, and the resulting events are delivered to `POST /webhooks/razorpay`,
+which is the only code path that writes `entities` / `entity_links` /
+`transactions`. Seeding and production therefore exercise identical code.
+
+### ⚠️ What Razorpay test mode can and cannot do
+
+This constrained the design and will constrain yours:
+
+| Thing | Possible via API? |
+|---|---|
+| Create an **order** | **Yes.** Every transaction in the corpus has a genuine `order_...` id, fetchable from Razorpay. |
+| Create a **payment link** | **Yes.** Used where an archetype calls for it. |
+| Create a **payment** | **No.** The docs are explicit: the Payments API exists *"only to retrieve payment details or change the status from authorized to captured and **not** to collect payments"*. Real payments come from Checkout in a browser, or from S2S endpoints requiring per-account enablement. |
+| Create a **refund** | **No** — a refund needs a real payment to refund. |
+| **Payouts** (RazorpayX) | Not attempted: separate product, separate account and credentials. |
+
+Consequences, stated plainly so nobody later assumes otherwise:
+- Orders are **real**. Payment entities attached to emitted `order.paid` events
+  are **synthesized locally** and carry `"synthesized": true`. Nothing in the
+  graph depends on them — ingest keys off the real order.
+- Return-abuse is modelled as a shared **refund instrument** plus a
+  `return_requested` flag, not as real refund objects.
+- Razorpay cannot deliver webhooks to `localhost`, so `scripts/seed_rings.py`
+  signs each event with `RAZORPAY_WEBHOOK_SECRET` and posts it to your own
+  receiver. The signature path, verification, and ingest are all real; only the
+  transport hop is local.
+
+### The six archetypes
+
+3 fraud patterns × 2 cadence variants, one named function each in
+`generator/archetypes.py`, registered in `ARCHETYPE_GENERATORS`:
+
+| Pattern | Pivot attribute | Signature |
+|---|---|---|
+| `card_testing` | 1–2 shared **instruments** | many tiny orders (₹1–₹49) probing validity |
+| `promo_farming` | one shared **address** / device | many accounts, 1–3 orders each, discount codes |
+| `return_abuse` | shared **instrument** (refund destination) | fewer, larger orders, very high return rate |
+
+| Cadence | Timing | Other tells |
+|---|---|---|
+| `human` | heavy-tailed lognormal gaps, diurnal, floor of 4s | picks promo codes at random |
+| `agent` | near-uniform ~1.6s gaps, **below human reaction time**, no diurnal shape | walks the promo list systematically, amount ladders |
+
+Measured on the current seed: median inter-order gap is **120s for human rings
+vs 1.6s for agent rings**.
+
+### Ground truth and the held-out split
+
+`transactions.is_synthetic_ring_id` holds a pipe-delimited label:
+
+```
+ring_09|promo_farming|agent|holdout
+```
+
+Normal background traffic has `NULL`. **Rings 1–8 are the tuning set; rings
+9–12 are HELD OUT** (`generator/config.py: HOLDOUT_RING_NUMBERS`). Do not look
+at or tune against 9–12 until Phase 6 evaluation.
+
+Reproducibility: the *plan* is fully deterministic in `RANDOM_SEED`. The
+Razorpay order ids are not — they are assigned per run.
+
+### Why background traffic pools are sized the way they are
+
+Each normal account gets its **own** device, address, and instrument. The pools
+are sized to exactly `normal_customer_count` on purpose: a smaller pool would
+make `index % pool_size` wrap and manufacture systematic accidental sharing,
+which would look like rings and make any precision number meaningless. Benign
+sharing (households, second devices) is injected explicitly and in small doses
+by `generator/normal.py`.
+
+---
+
 ## 6. Commands
 
 ```bash
 cp .env.example .env          # once
 docker compose up             # Postgres + migrated backend + frontend
-docker compose exec backend python -m scripts.seed   # the one seed command
+
+# Phase 1 - schema verification (seeds no data)
+docker compose exec backend python -m scripts.seed
+
+# Phase 2 - the full synthetic corpus, via real Razorpay test-mode orders
+docker compose exec backend python -m scripts.seed_rings --dry-run   # plan only
+docker compose exec backend python -m scripts.seed_rings --limit 20  # smoke test
+docker compose exec backend python -m scripts.seed_rings --reset     # full corpus
+
+# Ingest pipeline self-test (rolls back; safe against a populated database)
+docker compose exec backend python -m scripts.verify_ingest
 ```
 
 - Frontend → http://localhost:3000
@@ -246,7 +346,7 @@ docker compose exec backend alembic upgrade head
 | Phase | Scope | Status |
 |---|---|---|
 | **1** | Monorepo scaffold, Docker Compose, entity-graph schema + migration, env template, README | **Done** |
-| **2** | Razorpay test-mode ingest + synthetic ring generator (this is where fake data is finally allowed, labelled via `is_synthetic_ring_id`) | Not started |
+| **2** | Razorpay test-mode ingest + synthetic ring generator: 6 archetypes, 12 rings, webhook ingestion path | **Done** |
 | **3** | NetworkX detection: build graph from `entity_links`, find dense components, score, write `clusters` + `cluster_members`. **Reads `v_transactions_detector`, never the base table.** | Not started |
 | **4** | Claude Agent SDK case files for each cluster. Auth path already verified. | Not started |
 | **5** | Review UI: cluster queue, case file display, approve/dismiss, audit trail view | Not started |

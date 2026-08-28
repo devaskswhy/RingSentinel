@@ -1,7 +1,8 @@
 """RingSentinel API.
 
-Phase 1 is scaffolding only: health/readiness endpoints and nothing else.
-Detection, ingest, and case-file routes arrive in later phases - see CLAUDE.md.
+Phase 2 adds the Razorpay webhook receiver, which is the only path by which
+transactions enter the database. Detection and case-file routes arrive in later
+phases - see CLAUDE.md.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
+from app.webhooks import router as webhooks_router
 
 settings = get_settings()
 
@@ -29,6 +31,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(webhooks_router)
 
 EXPECTED_TABLES = (
     "entities",
@@ -77,4 +81,71 @@ def health_db(db: Session = Depends(get_db)) -> dict:
         "status": "ok" if not missing else "schema_incomplete",
         "tables_present": sorted(present & set(EXPECTED_TABLES)),
         "tables_missing": missing,
+    }
+
+
+@app.get("/eval/corpus", tags=["evaluation"])
+def eval_corpus(db: Session = Depends(get_db)) -> dict:
+    """Ground-truth corpus summary. EVALUATION SURFACE ONLY.
+
+    This endpoint deliberately reads `transactions.is_synthetic_ring_id`, which
+    is why it lives under /eval and is named as such. Detection code (Phase 3)
+    must never call it and must read `v_transactions_detector` instead - see
+    CLAUDE.md invariant #4. It exists so a human can confirm that what landed in
+    Postgres matches what was actually sent to Razorpay.
+    """
+    totals = db.execute(
+        text(
+            """
+            SELECT
+                (SELECT count(*) FROM entities)     AS entities,
+                (SELECT count(*) FROM entity_links) AS entity_links,
+                (SELECT count(*) FROM transactions) AS transactions
+            """
+        )
+    ).mappings().one()
+
+    by_type = dict(
+        db.execute(
+            text("SELECT type::text, count(*) FROM entities GROUP BY 1 ORDER BY 1")
+        ).all()
+    )
+    by_link = dict(
+        db.execute(
+            text("SELECT link_type::text, count(*) FROM entity_links GROUP BY 1 ORDER BY 1")
+        ).all()
+    )
+
+    rings = db.execute(
+        text(
+            """
+            SELECT
+                split_part(is_synthetic_ring_id, '|', 1) AS ring,
+                split_part(is_synthetic_ring_id, '|', 2) AS pattern,
+                split_part(is_synthetic_ring_id, '|', 3) AS cadence,
+                split_part(is_synthetic_ring_id, '|', 4) AS split,
+                count(*)                                 AS transactions,
+                count(DISTINCT customer_entity_id)       AS accounts
+            FROM transactions
+            WHERE is_synthetic_ring_id IS NOT NULL
+            GROUP BY 1, 2, 3, 4
+            ORDER BY 1
+            """
+        )
+    ).mappings().all()
+
+    normal_count = db.execute(
+        text("SELECT count(*) FROM transactions WHERE is_synthetic_ring_id IS NULL")
+    ).scalar_one()
+
+    return {
+        "totals": dict(totals),
+        "entities_by_type": by_type,
+        "links_by_type": by_link,
+        "normal_transactions": normal_count,
+        "rings": [dict(r) for r in rings],
+        "holdout_note": (
+            "Rings 09-12 are the held-out evaluation set. Do not tune the "
+            "detector against them."
+        ),
     }

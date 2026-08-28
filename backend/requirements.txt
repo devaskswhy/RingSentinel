@@ -16,5 +16,9 @@ networkx==3.6.1
 # Payments - TEST MODE ONLY (Phase 2)
 razorpay==2.0.1
 
+# HTTP client for the seed's webhook delivery (also a razorpay dependency,
+# pinned explicitly because scripts/seed_rings.py imports it directly)
+requests==2.34.2
+
 # LLM case files (Phase 4) - authenticated via Claude subscription OAuth, not an API key
 claude-agent-sdk==0.2.144

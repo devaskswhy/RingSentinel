@@ -56,6 +56,36 @@ docker compose exec backend python -m scripts.seed
 Phase 1 seeds no fraud data by design — this command verifies that every table,
 view, enum, and constraint exists and that the audit log really is append-only.
 
+**5. Seed the synthetic corpus (Phase 2)**
+
+This creates real Razorpay **test-mode** orders and ingests them through the
+webhook pipeline. It needs test credentials in `.env` first:
+
+- `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` — Razorpay Dashboard → Test Mode →
+  Account & Settings → API Keys. The key id must start with `rzp_test_`.
+- `RAZORPAY_WEBHOOK_SECRET` — any value locally; the seed signs the events it
+  replays with it. Generate one with:
+  `python -c "import secrets; print('whsec_local_'+secrets.token_hex(16))"`
+
+Then:
+
+```bash
+# See the plan without calling Razorpay or writing anything
+docker compose exec backend python -m scripts.seed_rings --dry-run
+
+# Smoke test: 20 real orders
+docker compose exec backend python -m scripts.seed_rings --limit 20
+
+# Full corpus (~1,500 orders; several minutes at the default 4 calls/sec)
+docker compose exec backend python -m scripts.seed_rings --reset
+```
+
+Verify the ingest pipeline at any time (rolls back, writes nothing):
+
+```bash
+docker compose exec backend python -m scripts.verify_ingest
+```
+
 ## Verify it worked
 
 | What | Where |
@@ -64,6 +94,7 @@ view, enum, and constraint exists and that the audit log really is append-only.
 | API docs | http://localhost:8000/docs |
 | Liveness | http://localhost:8000/health |
 | Schema health | http://localhost:8000/health/db |
+| Corpus summary (after seeding) | http://localhost:8000/eval/corpus |
 
 `/health/db` should report `"status": "ok"` with an empty `tables_missing`.
 
