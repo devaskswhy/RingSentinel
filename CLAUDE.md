@@ -1017,6 +1017,61 @@ decidable, and only an already-recorded decision blocks a second one.
 
 ---
 
+## 5h. Live cadence demonstration
+
+`scripts/simulate_agent_cadence.py` sends real Razorpay test-mode orders from
+six accounts sharing one payment instrument, at a fixed 4.0-second interval,
+through the normal webhook path — so the detector can be watched catching it.
+
+**Measured, full run:** 24 orders, 92.1s, interval spread **0 ms**, crossed the
+flag threshold at **24s**, final score 0.785, classified **`agent_like`**, case
+file written by Claude with no manual step.
+
+It exists to be *caught*. Nothing in it circumvents or probes anything, and no
+output could serve as guidance for avoiding detection. The track rule is
+"strictly defense-only", so the repo is kept clean of that vocabulary
+entirely — naming as well as behaviour.
+
+### Three things that were wrong before they were right
+
+**The displayed clock disagreed with the measured one.** An early run printed
+timestamps spanning 14.8s for a run monotonic measured at 12.1s — container
+wall-clock drift. On a demonstration whose entire claim is "look how regular
+this interval is", a drifting on-screen clock quietly contradicts the summary.
+The log now shows monotonic elapsed (`t+0:04.000`), so what is displayed and
+what is measured are the same quantity.
+
+**Detection sat inside the timing loop.** It is fast, but it must never sit
+between two orders. It now runs on its own thread with its own Session; the main
+loop only picks up a result already waiting.
+
+**The simulation re-expanded the queue.** It ran detection at full scope, so a
+run turned a curated 3-cluster demo state into 13 clusters mid-take. It now uses
+the same exclusion set `demo_reset` used, so the live cluster joins the three
+curated ones — four, not thirteen.
+
+### Repeatability
+
+`demo_reset` purges transactions from earlier live runs, identified **by time**
+rather than by name: the seeded corpus was written in one pass, and anything
+unlabelled after its newest transaction came from a demonstration. That rule
+also catches runs made before those entities carried a marker. Without it the
+queue grew by one cluster per take.
+
+### The console is live
+
+It polls every 4s (`POLL_INTERVAL_MS`), with a pulsing "live" indicator that can
+be paused, a `+N new` badge when clusters arrive, and a last-updated time.
+Polling rather than WebSockets: the queue changes on the order of seconds and a
+reviewer is not watching a tape.
+
+Both entrance animations are guarded against the poll — the table animates only
+when the set of visible cluster ids changes, and the scorecard animates once.
+Without those guards the whole console strobes every four seconds, which is
+fine in development and unusable on camera.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -1048,6 +1103,9 @@ docker compose exec backend python -m scripts.verify_detector_isolation
 
 # Demo reset - curated 3-cluster state for recording (~18s warm)
 docker compose exec backend python -m scripts.demo_reset
+
+# Live cadence demonstration - 24 orders at a fixed 4.0s interval (~92s)
+docker compose exec backend python -m scripts.simulate_agent_cadence
 
 # Phase 4 - case files and review
 docker compose exec backend python -m scripts.verify_claude_auth

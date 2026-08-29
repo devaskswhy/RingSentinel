@@ -26,13 +26,17 @@ export default function Scorecard({ data }: { data: ScorecardData | null }) {
   const root = useRef<HTMLDivElement>(null);
   const [held, setHeld] = useState<HeldOutMetrics | null>(null);
   const [showAssumptions, setShowAssumptions] = useState(false);
+  // The console polls every few seconds. Animating the metric tiles on every
+  // refresh would make the whole panel flicker; animate once, on first data.
+  const hasAnimated = useRef(false);
 
   useEffect(() => {
     api.metrics("holdout").then(setHeld).catch(() => setHeld(null));
   }, []);
 
   useEffect(() => {
-    if (!data || !root.current) return;
+    if (!data || !root.current || hasAnimated.current) return;
+    hasAnimated.current = true;
     const ctx = gsap.context(() => {
       gsap.from(".rs-metric", {
         opacity: 0,

@@ -30,6 +30,16 @@ import { CadencePill, ScoreBar, StatusPill } from "@/components/console/Bits";
 
 type SortKey = "score" | "size" | "status" | "cadence";
 
+/**
+ * How often the console re-reads the backend.
+ *
+ * Polling, not WebSockets. The queue changes on the order of seconds, a
+ * reviewer is not watching a tape, and a 4s GET against a local API costs
+ * nothing. Pushing would be more machinery for no behaviour a human would
+ * notice.
+ */
+const POLL_INTERVAL_MS = 4000;
+
 const FILTERS: { label: string; value: ClusterStatus | "all" }[] = [
   { label: "All", value: "all" },
   { label: "Pending", value: "pending" },
@@ -49,12 +59,32 @@ export default function Console() {
   const [loading, setLoading] = useState(true);
 
   const tableRef = useRef<HTMLTableSectionElement>(null);
+  const [live, setLive] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [newCount, setNewCount] = useState(0);
+
+  // Which clusters we have already animated in. Without this the entrance
+  // animation re-fires on every poll and the whole table pulses every four
+  // seconds - fine in dev, awful on camera.
+  const animatedIds = useRef<string>("");
+  const knownIds = useRef<Set<string>>(new Set());
+  const loadDetailRef = useRef<((id: string) => Promise<void>) | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const [list, card] = await Promise.all([api.listClusters(), api.scorecard()]);
+
+      // Flag genuinely new clusters so a live arrival is visible rather than
+      // silently appearing in a sorted list.
+      if (knownIds.current.size) {
+        const fresh = list.filter((c) => !knownIds.current.has(c.id));
+        if (fresh.length) setNewCount((n) => n + fresh.length);
+      }
+      knownIds.current = new Set(list.map((c) => c.id));
+
       setClusters(list);
       setScorecard(card);
+      setLastUpdate(new Date());
       setError(null);
       return list;
     } catch (e) {
@@ -72,6 +102,19 @@ export default function Console() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Poll while `live`. Refreshing the detail pane alongside the list is safe:
+  // the review form's state is local to ClusterDetail and keyed on cluster id,
+  // so a re-fetch of the same cluster never clears a half-typed reason.
+  useEffect(() => {
+    if (!live) return;
+    const timer = setInterval(() => {
+      refresh();
+      if (selected) loadDetailRef.current?.(selected);
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, selected, refresh]);
+
   const loadDetail = useCallback(async (id: string) => {
     try {
       setDetail(await api.getCluster(id));
@@ -81,12 +124,24 @@ export default function Console() {
   }, []);
 
   useEffect(() => {
+    loadDetailRef.current = loadDetail;
+  }, [loadDetail]);
+
+  useEffect(() => {
     if (selected) loadDetail(selected);
   }, [selected, loadDetail]);
 
   // Row entrance. Transform and opacity only.
   useEffect(() => {
     if (!tableRef.current || loading) return;
+
+    // Only animate when the SET of visible clusters actually changed. Polling
+    // re-renders every few seconds; re-running the entrance each time would
+    // make the table strobe.
+    const signature = clusters.map((c) => c.id).join(",") + `|${filter}|${sort}|${asc}`;
+    if (signature === animatedIds.current) return;
+    animatedIds.current = signature;
+
     const ctx = gsap.context(() => {
       gsap.from(".rs-row", {
         opacity: 0,
@@ -159,9 +214,55 @@ export default function Console() {
             review console
           </span>
         </Link>
-        <button onClick={() => refresh()} style={refreshButton} className="rs-focus">
-          Refresh
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          {newCount > 0 && (
+            <button
+              onClick={() => setNewCount(0)}
+              className="rs-pill rs-focus"
+              style={{
+                color: "var(--ink)",
+                background: "var(--accent)",
+                border: "none",
+                cursor: "pointer",
+              }}
+              title="Clusters that appeared since you started watching"
+            >
+              +{newCount} new
+            </button>
+          )}
+          <button
+            onClick={() => setLive((v) => !v)}
+            className="rs-focus"
+            style={{
+              ...refreshButton,
+              color: live ? "var(--accent)" : "var(--text-faint)",
+              borderColor: live ? "var(--accent)" : "var(--line-strong)",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.45rem",
+            }}
+            title={
+              live
+                ? `Polling every ${POLL_INTERVAL_MS / 1000}s. Click to pause.`
+                : "Paused. Click to resume live updates."
+            }
+          >
+            <span
+              className={live ? "rs-live-dot" : undefined}
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: live ? "var(--accent)" : "var(--text-faint)",
+                display: "inline-block",
+              }}
+            />
+            {live ? "live" : "paused"}
+          </button>
+          <button onClick={() => refresh()} style={refreshButton} className="rs-focus">
+            Refresh
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -213,6 +314,11 @@ export default function Console() {
               style={{ marginLeft: "auto", color: "var(--text-faint)", alignSelf: "center" }}
             >
               {visible.length} cluster{visible.length === 1 ? "" : "s"}
+              {lastUpdate && (
+                <span style={{ marginLeft: "0.6rem" }}>
+                  · updated {lastUpdate.toLocaleTimeString()}
+                </span>
+              )}
             </span>
           </div>
 

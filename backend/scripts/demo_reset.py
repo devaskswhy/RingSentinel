@@ -102,6 +102,62 @@ def wipe_clusters() -> int:
     return int(removed or 0)
 
 
+def purge_previous_live_runs() -> int:
+    """Remove transactions left behind by earlier live-demonstration runs.
+
+    Those transactions carry no ring label, so the scope filter never hides
+    them and every past run keeps contributing its own cluster - the queue would
+    grow by one cluster per take, which is the opposite of what a reset is for.
+
+    Identified by time, not by name. The seeded corpus was written in one pass
+    and its newest transaction marks the end of that window; anything unlabelled
+    that arrived afterwards came from a live run. That rule is robust to how the
+    entity references happen to be formatted, and it correctly catches runs made
+    before those references carried a marker at all.
+
+    Order matters: entity_links cascade from transactions, so transactions go
+    first; the entities are then unreferenced and safe to drop.
+    """
+    with engine.begin() as conn:
+        boundary = conn.execute(
+            text(
+                "SELECT max(created_at) FROM transactions "
+                "WHERE is_synthetic_ring_id IS NOT NULL"
+            )
+        ).scalar()
+        if boundary is None:
+            return 0
+
+        removed = conn.execute(
+            text(
+                """
+                DELETE FROM transactions
+                WHERE is_synthetic_ring_id IS NULL
+                  AND created_at > :boundary
+                """
+            ),
+            {"boundary": boundary},
+        ).rowcount
+
+        # Entities orphaned by that delete. Anything still referenced by a
+        # surviving transaction is left alone.
+        conn.execute(
+            text(
+                """
+                DELETE FROM entities e
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM transactions t
+                    WHERE t.customer_entity_id = e.id
+                       OR t.device_entity_id = e.id
+                       OR t.address_entity_id = e.id
+                       OR t.instrument_entity_id = e.id
+                )
+                """
+            )
+        )
+    return int(removed or 0)
+
+
 async def generate_all(cluster_ids: list[uuid.UUID]) -> tuple[int, list[str]]:
     """Write every case file concurrently.
 
@@ -214,7 +270,11 @@ def main() -> int:
     db = SessionLocal()
     try:
         removed = wipe_clusters()
-        print(f"  {OK} cleared {removed} cluster(s); transactions untouched")
+        print(f"  {OK} cleared {removed} cluster(s)")
+        purged = purge_previous_live_runs()
+        if purged:
+            print(f"  {OK} purged {purged} transaction(s) from earlier live-demo runs")
+        print("  seeded corpus transactions untouched")
 
         excluded = transactions_outside(db, DEMO_RINGS)
         run = run_detection(
