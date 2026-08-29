@@ -220,8 +220,13 @@ def find_cached(db: Session, cluster_id: uuid.UUID, score: float) -> CaseFile | 
     )
 
 
-async def _ask_claude(user_prompt: str) -> tuple[str, str]:
-    """Run one turn against the Agent SDK. Returns (reply_text, model)."""
+async def _ask_claude(user_prompt: str) -> tuple[str, str, dict]:
+    """Run one turn against the Agent SDK.
+
+    Returns (reply_text, model, telemetry). Telemetry carries the SDK's own
+    measured cost and token usage for this call, so cost-per-cluster is an
+    observation rather than an estimate.
+    """
     try:
         from claude_agent_sdk import (
             AssistantMessage,
@@ -234,16 +239,24 @@ async def _ask_claude(user_prompt: str) -> tuple[str, str]:
             "claude-agent-sdk is not installed; run pip install -r requirements.txt"
         ) from exc
 
-    options = ClaudeAgentOptions(
-        system_prompt=SYSTEM_PROMPT,
+    from app.config import get_settings
+
+    option_kwargs: dict = {
+        "system_prompt": SYSTEM_PROMPT,
         # No tools. Not "tools it should not use" - no tools exist for it to
         # call, so the explain-only boundary is structural, not advisory.
-        allowed_tools=[],
-        max_turns=1,
-    )
+        "allowed_tools": [],
+        "max_turns": 1,
+    }
+    configured_model = get_settings().claude_case_file_model
+    if configured_model:
+        option_kwargs["model"] = configured_model
+
+    options = ClaudeAgentOptions(**option_kwargs)
 
     chunks: list[str] = []
     model = ""
+    telemetry: dict = {}
     try:
         async for message in query(prompt=user_prompt, options=options):
             if isinstance(message, AssistantMessage):
@@ -257,6 +270,7 @@ async def _ask_claude(user_prompt: str) -> tuple[str, str]:
                     raise CaseFileError(
                         f"Agent SDK returned subtype={message.subtype!r}"
                     )
+                telemetry = _telemetry_from(message)
     except CaseFileError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -267,7 +281,51 @@ async def _ask_claude(user_prompt: str) -> tuple[str, str]:
     reply = "".join(chunks).strip()
     if not reply:
         raise CaseFileError("Agent SDK returned an empty reply")
-    return reply, model
+    return reply, model, telemetry
+
+
+def _telemetry_from(message) -> dict:  # noqa: ANN001 - SDK type
+    """Pull measured cost and token usage out of the SDK's ResultMessage.
+
+    Defensive about shape: the SDK reports usage as a dict whose keys have
+    varied across versions, so unknown shapes degrade to zeros rather than
+    raising. A missing cost number should never fail a case file.
+    """
+    usage = getattr(message, "usage", None) or {}
+    if not isinstance(usage, dict):
+        usage = {}
+
+    def _int(*keys: str) -> int:
+        for key in keys:
+            value = usage.get(key)
+            if isinstance(value, (int, float)):
+                return int(value)
+        return 0
+
+    # Input arrives in three buckets and they are NOT interchangeable for
+    # pricing: fresh input, cache writes, and cache reads are each billed at a
+    # different rate. Observed on a real call: input_tokens=2 with
+    # cache_creation_input_tokens=12785 - reading `input_tokens` alone would
+    # under-report the prompt by four orders of magnitude.
+    #
+    # So the token counts here are INFORMATIONAL. `cost_usd` is the SDK's own
+    # measured figure and is the number to trust; it already accounts for the
+    # tier mix. Anything costing this out should use cost_usd, not arithmetic
+    # over these token counts.
+    total_input = (
+        _int("input_tokens", "prompt_tokens")
+        + _int("cache_creation_input_tokens")
+        + _int("cache_read_input_tokens")
+    )
+
+    return {
+        "cost_usd": float(getattr(message, "total_cost_usd", 0.0) or 0.0),
+        "input_tokens": total_input,
+        "output_tokens": _int("output_tokens", "completion_tokens"),
+        "duration_ms": int(getattr(message, "duration_ms", 0) or 0),
+        "usage": usage,
+        "model_usage": getattr(message, "model_usage", None) or {},
+    }
 
 
 async def generate_case_file(
@@ -299,7 +357,7 @@ async def generate_case_file(
         amount_summary=context["amount_summary"],
     )
 
-    reply, model = await _ask_claude(user_prompt)
+    reply, model, telemetry = await _ask_claude(user_prompt)
     parsed = parse_case_file_response(reply)
 
     case_file = CaseFile(
@@ -316,6 +374,14 @@ async def generate_case_file(
         cluster_score_at_generation=round(score, 6),
         detector_version=cluster.get("detector_version") or "",
         generated_at=datetime.now(timezone.utc),
+        cost_usd=telemetry.get("cost_usd", 0.0),
+        input_tokens=telemetry.get("input_tokens", 0),
+        output_tokens=telemetry.get("output_tokens", 0),
+        duration_ms=telemetry.get("duration_ms", 0),
+        usage_json={
+            "usage": telemetry.get("usage", {}),
+            "model_usage": telemetry.get("model_usage", {}),
+        },
     )
     db.add(case_file)
     db.flush()
@@ -334,6 +400,9 @@ async def generate_case_file(
                 "prompt_version": PROMPT_VERSION,
                 "model": case_file.model,
                 "cluster_score": score,
+                "cost_usd": telemetry.get("cost_usd", 0.0),
+                "input_tokens": telemetry.get("input_tokens", 0),
+                "output_tokens": telemetry.get("output_tokens", 0),
                 "detector_version": case_file.detector_version,
                 "note": (
                     "recommendation only; cluster status unchanged and still "

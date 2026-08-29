@@ -29,6 +29,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -383,6 +384,23 @@ class CaseFile(Base):
     )
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    # Measured, not estimated. The Agent SDK reports what each call actually
+    # cost, so cost-per-cluster is an observation multiplied by a volume
+    # assumption - rather than two assumptions multiplied together.
+    cost_usd: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
+    input_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    output_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    duration_ms: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    usage_json: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
     )
 
     __table_args__ = (

@@ -904,6 +904,77 @@ change because someone edited a threshold afterwards.
 
 ---
 
+## 5f. Measured facts for later phases
+
+Two things were researched and measured rather than assumed, so later phases can
+cite them without re-deriving. Both are recorded with their limits.
+
+### Case-file cost — measured, not estimated
+
+The Agent SDK reports `total_cost_usd` and full token usage on every call.
+Migration 0006 stores them on `case_files`, so cost per cluster is an
+observation multiplied by a volume assumption, rather than two assumptions
+multiplied together.
+
+| Condition | Cost | Input tokens | Output |
+|---|---|---|---|
+| Cold prompt cache | **$0.1468** | 12,785 written | 691 |
+| Warm prompt cache | **$0.0282** | 12,785 read | 806 |
+
+Same model (`claude-opus-5`), same prompt. The 5.2x gap is entirely prompt
+caching: a cold call pays to *write* the cache, a warm one pays to *read* it.
+
+Two consequences worth knowing before quoting a number:
+- **Quote a range, not a point.** Batch generation runs warm and lands near
+  $0.03; a single cluster reviewed hours later runs cold at ~$0.15.
+- **Cost scales with flagged clusters, not transactions.** The corpus is 1,499
+  transactions and 12 clusters. Case files are generated per *cluster*, so the
+  LLM bill is roughly three orders of magnitude smaller than a
+  per-transaction design would be. That is a property of the graph approach,
+  not an optimisation.
+
+Token counts are informational only. Fresh input, cache writes, and cache reads
+are billed at different rates, so `cost_usd` is the number to trust —
+`app/case_files.py` says so at the point of capture.
+
+`Settings.claude_case_file_model` makes the model an explicit choice. Left
+unset, the SDK picks; set it to pin one. Every generation records which model
+ran, so a change is visible in the data.
+
+### RBI draft Model Risk Management guidance — verified 2026-08-29
+
+Verified against reporting on the RBI draft, *Guidance on Regulatory Principles
+for Model Risk Management, 2026*. Public comments closed **24 July 2026**. It is
+a **draft** and **non-binding**.
+
+What it asks for, and where RingSentinel already stands:
+
+| Draft asks for | RingSentinel |
+|---|---|
+| Kill-switch: every AI system can be overridden, suspended, deactivated | Nothing to switch off — no code path can act on an account at all |
+| Human oversight of automated decisions | A Postgres trigger refuses any decision outside a human review action |
+| Reviewers able to genuinely challenge, not rubber-stamp | Written reason mandatory; full per-signal evidence shown; decision immutable once recorded |
+| Concern about automation bias and decision fatigue | Claude's recommendation is advisory and labelled as such; the ambiguous band says "unsure" instead of forcing a binary |
+| Black-box models need disclosed reasoning or stricter controls | Every score decomposes into named signals with the entities that drove them |
+
+### ⚠️ Scope — do not overstate this
+
+The stated scope is commercial banks, small finance banks, **payments banks**,
+local area banks, co-operative banks, regional rural banks, NBFCs, all-India
+financial institutions, asset reconstruction companies, and credit information
+companies.
+
+**Payment aggregators are not in that list.** Razorpay is a payment aggregator,
+not a payments bank. Do not claim Razorpay is bound by this draft, and do not
+call it a regulation — it is a draft out for comment.
+
+The honest and still-strong claim: this is the direction Indian financial AI
+regulation is moving, many of Razorpay's own merchants (banks and NBFCs) would
+be directly on the hook, and RingSentinel already meets the bar the draft
+describes.
+
+---
+
 ## 6. Commands
 
 ```bash

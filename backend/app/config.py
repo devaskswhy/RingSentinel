@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     razorpay_key_secret: str | None = None
     razorpay_webhook_secret: str | None = None
 
+    # ---- Claude case files (Phase 4) ----
+    #: Which model writes case files. Explicit rather than "whatever the SDK
+    #: defaults to", because the model materially changes both quality and cost
+    #: per cluster, and a silent default makes the cost story unfalsifiable.
+    #: Every generation records its measured cost, so this is a decision that
+    #: can be revisited with data rather than opinion.
+    claude_case_file_model: str | None = None
+
     @property
     def razorpay_is_test_mode(self) -> bool:
         """Guard used by the ingest layer so a live key can never be used."""
