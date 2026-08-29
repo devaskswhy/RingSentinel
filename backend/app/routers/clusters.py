@@ -56,6 +56,12 @@ ACTION_TO_AUDIT_NAME = {
     "dismiss": "cluster_dismissed",
 }
 
+#: Statuses a human may still decide from. Both are pre-decision triage states
+#: set by the detector; neither has touched a customer.
+_DECIDABLE_FROM = frozenset(
+    {ClusterStatus.pending.value, ClusterStatus.needs_review.value}
+)
+
 
 class ReviewRequest(BaseModel):
     """A human decision. The reason is mandatory and goes into the audit log."""
@@ -325,7 +331,11 @@ def _record_review(
     previous = cluster["status"]
     new_status = ACTION_TO_STATUS[action]
 
-    if previous != ClusterStatus.pending.value:
+    # Both pre-decision states are decidable. `needs_review` in particular MUST
+    # be: it means "the detector is unsure, a human should look", so refusing to
+    # let a human then decide it would strand exactly the clusters that most
+    # need judgement. Only an already-recorded decision blocks a second one.
+    if previous not in _DECIDABLE_FROM:
         raise HTTPException(
             status_code=http_status.HTTP_409_CONFLICT,
             detail=(

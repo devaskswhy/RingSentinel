@@ -975,6 +975,48 @@ describes.
 
 ---
 
+## 5g. Demo reset
+
+`scripts/demo_reset.py` puts the console into a curated three-cluster state for
+recording, and is re-runnable between takes. **~18s warm, ~30s on the first cold
+run** (the difference is entirely the prompt cache).
+
+Two departures from how the brief described it, both deliberate:
+
+**It does not wipe `audit_log`.** That table is append-only by trigger, and the
+trigger is one of the things the demo exists to show — dropping it for
+convenience would disarm the strongest claim in the project. It is also
+unnecessary: the console renders a cluster's trail by `target_id`, and the reset
+deletes and recreates clusters, so each gets a fresh id and a visibly clean
+history. Old rows point at dead cluster ids and never render.
+
+**It curates by scope, not by fabrication.** It hands the detector an opaque
+exclusion set — the same mechanism the evaluation splits use — so only three
+seeded rings are in view while all 900 background transactions stay. Every
+cluster on screen is a real detection over real Razorpay test-mode data.
+
+### ⚠️ There is no true false positive to demo
+
+The brief asked for a "clean false-positive-shaped case". **One does not exist**
+— the detector has never produced a false positive on this corpus, so the third
+cluster is a genuine ring that merely *looks* innocent (address-only sharing,
+human cadence, score 0.386).
+
+The script prints ground truth for each cluster before you record, plus the
+honest narration: if you dismiss it on camera, say that the detector flagged it,
+said it was unsure, Claude leaned false-positive, and a human still got it wrong
+— which is precisely why the audit log records who decided and why. That lands
+better than implying a false positive the system never made.
+
+### A bug this phase found
+
+`needs_review` clusters could not be approved or dismissed — `_record_review`
+only accepted `pending`, so the Phase 6 triage band stranded exactly the
+clusters that most needed human judgement. Fixed: both pre-decision states are
+decidable, and only an already-recorded decision blocks a second one.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -1003,6 +1045,9 @@ docker compose exec backend python -m scripts.evaluate_detection --sweep
 
 # Prove the detector cannot see ground truth (invariant #4)
 docker compose exec backend python -m scripts.verify_detector_isolation
+
+# Demo reset - curated 3-cluster state for recording (~18s warm)
+docker compose exec backend python -m scripts.demo_reset
 
 # Phase 4 - case files and review
 docker compose exec backend python -m scripts.verify_claude_auth
