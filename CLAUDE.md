@@ -1072,6 +1072,67 @@ fine in development and unusable on camera.
 
 ---
 
+## 5i. Resilience, and the counterfactual
+
+### The failures were always handled; nothing showed them
+
+`scripts/verify_resilience.py` breaks six things for real and names the
+mechanism that absorbs each. Every database check rolls back, so it is safe to
+run against a populated corpus at any time. **6/6 pass.**
+
+| Failure | Fallback |
+|---|---|
+| DB connection dropped | `pool_pre_ping` swaps in a live connection |
+| Malformed model output | tolerant parser; unknown action → labelled `review_closer`; truncated JSON raises before any write |
+| Model call fails | `CaseFileError` before any write — previous case file survives |
+| 429 storm | response hook reads the status the SDK discards, then backs off |
+| Duplicate webhook | unique constraints + `ON CONFLICT DO NOTHING` |
+| Forged signature / bad payload | 401, then 400 |
+
+Only the *outside world* is faked — a 429, a truncated response. The handling
+under test is the real production path in every case.
+
+Two bugs in the checks themselves, both worth remembering:
+
+- **The reconnect check killed itself.** It asked the pool for a second
+  connection to terminate the first from, got the same connection back, and
+  terminated its own backend. The killer now comes from a separate `NullPool`
+  engine.
+- **The model-failure check destroyed its own evidence.** It rolled the session
+  back before verifying the previous case file survived — so the case file it
+  had just provisioned vanished, and the check "proved" a loss it had caused.
+  Now scoped to a savepoint.
+
+Both would have produced a confident, wrong report.
+
+### Counterfactual — "how close was this?"
+
+`GET /clusters/{id}` returns a `counterfactual` field: the nearest boundary and
+the smallest change that would cross it.
+
+```
+0.428 needs_review → "one more account sharing the same instrument would take
+                      this to 0.452, crossing the confidence threshold at 0.45"
+0.846 pending      → "even discounting the shared device entirely, this would
+                      still score 0.768"
+```
+
+This is a sensitivity read on the existing score, not new detection. It is only
+answerable *because* the score is a sum of named signals — a model output could
+not be interrogated this way. `detection/counterfactual.py` imports the weights
+and the saturation constant from `config.py` rather than restating them, so it
+cannot drift out of step with `scoring.py`.
+
+### ⚠️ One deviation from the brief
+
+The brief asked for a counterfactual on "any cluster below the flag threshold".
+**No such cluster exists** — the detector only persists clusters at or above
+0.30, so that field would never have rendered. It reports against the *nearest*
+boundary instead: the confidence threshold for a `needs_review` cluster, and the
+margin below it for a confident one. Both cases fire on real data.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -1106,6 +1167,9 @@ docker compose exec backend python -m scripts.demo_reset
 
 # Live cadence demonstration - 24 orders at a fixed 4.0s interval (~92s)
 docker compose exec backend python -m scripts.simulate_agent_cadence
+
+# Prove the failure handling - six scenarios, all rolled back
+docker compose exec backend python -m scripts.verify_resilience
 
 # Phase 4 - case files and review
 docker compose exec backend python -m scripts.verify_claude_auth

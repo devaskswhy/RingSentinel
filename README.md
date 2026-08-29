@@ -140,7 +140,11 @@ docker compose exec backend python -m scripts.verify_detector_isolation  # #4
 docker compose exec backend python -m scripts.verify_human_gate          # #1 #2 #3
 docker compose exec backend python -m scripts.verify_ingest              # idempotency
 docker compose exec backend python -m scripts.verify_claude_auth         # auth path
+docker compose exec backend python -m scripts.verify_resilience          # 6 failure modes
 ```
+
+Architecture, the AI-judgment split, and the failure-handling table are in
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Verify it worked
 

@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 from app.case_files import CaseFileError, generate_case_file
 from app.db import get_db
 from app.models import AuditActor, AuditLog, ClusterStatus
+from detection.counterfactual import counterfactual
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -258,6 +259,11 @@ def get_cluster(cluster_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
             else None
         ),
         "evidence": cluster["evidence_json"],
+        # How close was this? Answerable only because the score is a sum of
+        # named signals rather than a model output.
+        "counterfactual": counterfactual(
+            cluster["evidence_json"] or {}, float(cluster["score"])
+        ),
         "graph": {
             "nodes": [
                 {
