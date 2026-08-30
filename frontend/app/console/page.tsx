@@ -194,6 +194,10 @@ export default function Console() {
       behavior: prefersReducedMotion() ? "auto" : "smooth",
       block: "start",
     });
+    // The queue collapses to a scroll box when a case opens, so the open row
+    // can end up outside it. Bring it back without moving the page.
+    const row = document.querySelector<HTMLElement>(`[data-row-id="${selected}"]`);
+    row?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
 
@@ -314,7 +318,11 @@ export default function Console() {
 
       <div style={{ flex: 1 }}>
         {/* ---- queue, full width -------------------------------------- */}
-        <div className="rs-console-shell" style={{ paddingBlock: "1.75rem 2.5rem" }}>
+        <div
+          className="rs-console-shell rs-queue"
+          data-compact={Boolean(selected)}
+          style={{ paddingBlock: "1.75rem 2.5rem" }}
+        >
           <div
             style={{
               display: "flex",
@@ -351,6 +359,7 @@ export default function Console() {
             </span>
           </div>
 
+          <div className="rs-queue-scroll">
           {loading ? (
             <div className="rs-mono" style={{ color: "var(--text-faint)" }}>
               loading queue…
@@ -382,6 +391,7 @@ export default function Console() {
                     key={c.id}
                     className="rs-row rs-anim"
                     data-selected={selected === c.id}
+                    data-row-id={c.id}
                     onClick={() => setSelected(c.id)}
                   >
                     <td
@@ -407,14 +417,8 @@ export default function Console() {
                       <StatusTag status={c.status} />
                     </td>
                     <td
-                      style={{
-                        ...tdStyle,
-                        color: "var(--text-muted)",
-                        maxWidth: 280,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
+                      className="rs-evidence-cell"
+                      style={{ ...tdStyle, color: "var(--text-muted)" }}
                       title={c.headline ?? ""}
                     >
                       {c.headline ?? "—"}
@@ -431,6 +435,7 @@ export default function Console() {
               <code>docker compose exec backend python -m scripts.detect</code>
             </div>
           )}
+          </div>
           {!loading && visible.length > 0 && !selected && (
             <p className="rs-queue-hint">
               Select a cluster to open its full case below — the evidence, the

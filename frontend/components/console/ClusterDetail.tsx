@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { api, type ClusterDetail as Detail, type EvidencePack } from "@/lib/api";
-import { DURATION, EASE_OUT } from "@/lib/tokens";
+import { DURATION, EASE_OUT, prefersReducedMotion } from "@/lib/tokens";
 import AuditTrail from "./AuditTrail";
 import GraphView from "./GraphView";
 import { ActionTag, CadenceTag, ScoreBar, SectionTitle, StatusTag } from "./Bits";
@@ -47,13 +47,18 @@ export default function ClusterDetail({
 
   useEffect(() => {
     if (!root.current) return;
+    if (prefersReducedMotion()) return;
     const ctx = gsap.context(() => {
+      // The case cascades in rather than appearing whole. Opening a cluster is
+      // the one moment in this console where a reviewer's attention has to move
+      // from the queue to a document, and staggering the seven sections walks
+      // the eye down them in the order they are meant to be read.
       gsap.from(".rs-detail-block", {
         opacity: 0,
-        y: 12,
-        duration: DURATION.fast,
+        y: 26,
+        duration: DURATION.slow * 0.55,
         ease: EASE_OUT,
-        stagger: 0.05,
+        stagger: 0.07,
       });
     }, root);
     return () => ctx.revert();
