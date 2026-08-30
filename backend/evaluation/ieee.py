@@ -62,6 +62,19 @@ REFERENCE_EPOCH = datetime(2017, 12, 1, tzinfo=timezone.utc)
 CARD_COLUMNS = ("card1", "card2", "card3", "card5", "card4", "card6")
 
 
+#: Entity and transaction ids are derived from their reference rather than
+#: minted fresh, so a run is reproducible. With uuid4 the ids changed every run
+#: and Louvain — which is seeded, but whose output still depends on node
+#: identity — returned slightly different communities each time, moving the
+#: measured lift between runs. A number that moves when nothing changed cannot
+#: be argued with.
+IEEE_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "ringsentinel/ieee-cis")
+
+
+def _stable_id(kind: str, value: str) -> uuid.UUID:
+    return uuid.uuid5(IEEE_NAMESPACE, f"{kind}:{value}")
+
+
 def _ref(kind: str, value: str) -> str:
     """Opaque token, same shape the seeded corpus uses. No raw values stored."""
     digest = hashlib.sha256(f"ieee|{kind}|{value}".encode()).hexdigest()[:20]
@@ -179,7 +192,7 @@ def insert_corpus(db: Session, corpus: IeeeCorpus) -> set[uuid.UUID]:
                  "addr": "address", "dev": "device"}[kind]
         key = (etype, ref)
         if key not in entity_ids:
-            entity_ids[key] = uuid.uuid4()
+            entity_ids[key] = _stable_id(etype, ref)
         return entity_ids[key]
 
     tx_rows = []
@@ -190,7 +203,7 @@ def insert_corpus(db: Session, corpus: IeeeCorpus) -> set[uuid.UUID]:
         did = entity("dev", r.device_ref) if r.device_ref else None
         tx_rows.append(
             {
-                "id": uuid.uuid4(),
+                "id": _stable_id("tx", r.transaction_id),
                 "razorpay_order_id": f"ieee_{r.transaction_id}",
                 "customer_entity_id": cid,
                 "device_entity_id": did,
@@ -248,7 +261,7 @@ def insert_corpus(db: Session, corpus: IeeeCorpus) -> set[uuid.UUID]:
             a, b = (cid, other) if str(cid) < str(other) else (other, cid)
             link_rows.append(
                 {
-                    "id": uuid.uuid4(),
+                    "id": _stable_id("link", f"{a}|{b}|{ltype}|{tx['id']}"),
                     "entity_id_a": a,
                     "entity_id_b": b,
                     "link_type": ltype,
