@@ -1173,7 +1173,8 @@ h1, h2, h3, h4 {
 }
 
 .rs-graph-note {
-  margin: 1.1rem 0 0;
+  margin: 1.1rem auto 0;
+  max-width: 640px;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
   font-size: var(--console-small);

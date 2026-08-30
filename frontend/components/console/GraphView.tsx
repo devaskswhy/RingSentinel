@@ -19,7 +19,18 @@ import type { GraphEdge, GraphNode } from "@/lib/api";
 import { NODE_COLORS } from "@/lib/tokens";
 
 const W = 640;
-const H = 420;
+const H = 380;
+/**
+ * The diagram is capped at its natural size rather than stretched to the
+ * column.
+ *
+ * At `width: 100%` in a 1400px pane this rendered about 940px tall: the nodes
+ * scaled up with it, the margins scaled up with them, and a reviewer scrolled
+ * past half a screen of empty canvas to reach the decision. Held at 640px the
+ * nodes sit at the radius they were designed for and the whole panel fits
+ * without scrolling.
+ */
+const MAX_RENDER_PX = 640;
 const ITERATIONS = 320;
 
 interface Placed {
@@ -226,7 +237,16 @@ export default function GraphView({
 
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        style={{
+          width: "100%",
+          maxWidth: MAX_RENDER_PX,
+          height: "auto",
+          display: "block",
+          margin: "0 auto",
+        }}
+      >
         <g>
           {edges.map((e, i) => {
             const a = byId.get(e.source);
