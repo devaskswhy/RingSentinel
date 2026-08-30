@@ -8,31 +8,66 @@
  * where the argument lives; the rest are ordinary sections. Adding pinning to
  * all four would be motion for its own sake.
  *
- * Every animation uses EASE and DURATION from lib/tokens. Only transform,
- * opacity, and stroke-dashoffset are animated — never geometry.
+ * Every animation uses EASE and DURATION from lib/tokens. In the DOM only
+ * transform and opacity are animated, never geometry. The pinned sequence is
+ * a canvas, and the scrub drives it through a single number rather than
+ * through 1,499 DOM tweens.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Loader from "@/components/landing/Loader";
-import RingGraph, {
-  RING_DOTS,
-  gridPositions,
-  ringPositions,
-} from "@/components/landing/RingGraph";
+import TransactionField, {
+  FALLBACK_CORPUS,
+  type CorpusShape,
+  type FieldHandle,
+} from "@/components/landing/TransactionField";
+import { api } from "@/lib/api";
 import { initSmoothScroll, gsap, ScrollTrigger } from "@/lib/smoothScroll";
 import {
   DURATION,
   EASE,
   EASE_OUT,
   MOBILE_BREAKPOINT,
-  STAGGER,
 } from "@/lib/tokens";
 
 export default function Landing() {
   const [ready, setReady] = useState(false);
   const scope = useRef<HTMLDivElement>(null);
+  const field = useRef<FieldHandle>(null);
   const onLoaderDone = useCallback(() => setReady(true), []);
+
+  // Start from the measured fallback so the field renders the true corpus shape
+  // immediately, then replace it with live figures if the API answers. The page
+  // must never depend on the backend being up — it is the first thing a judge
+  // opens, and a blank hero because a container was restarting would be a
+  // self-inflicted wound.
+  const [corpus, setCorpus] = useState<CorpusShape>(FALLBACK_CORPUS);
+
+  // Every number in the sequence captions is derived from the same object the
+  // field is drawn from, so the copy cannot drift from what is on screen. The
+  // previous captions said "eighteen transactions" because that was how many
+  // dots the illustration had; hard-coding a count next to a live figure is
+  // exactly how a demo ends up contradicting itself.
+  const total = corpus.totals.transactions;
+  const ringTransactions = total - corpus.normal_transactions;
+  const ringCount = corpus.rings.length;
+  const ringAccounts = corpus.rings.reduce((n, r) => n + r.accounts, 0);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .corpus()
+      .then((live) => {
+        if (!cancelled && live?.rings?.length) setCorpus(live);
+      })
+      .catch(() => {
+        /* keep the fallback; the shape is the same */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -82,41 +117,28 @@ export default function Landing() {
           },
         });
 
-        // Beat 1 -> 2: the caption swaps as the dots resolve.
+        // Beat 1 -> 2: the caption swaps as the field resolves.
         tl.to(".rs-cap-problem", { opacity: 0, y: -20, duration: 0.5, ease: EASE }, 0.5)
           .to(".rs-cap-mechanism", { opacity: 1, y: 0, duration: 0.6, ease: EASE }, 0.9);
 
-        // Noise transactions recede — they were never part of it.
+        // The field itself is one number. Every dot, edge and hub is derived
+        // from it inside the canvas, so the scrub drives a single tween rather
+        // than 1,499 DOM tweens — which is the reason this is a canvas at all.
+        // `ease: none` because the easing that matters is per-ring, applied
+        // inside the field so the twelve rings resolve as a wave.
+        const scrub = { p: 0 };
         tl.to(
-          ".rs-dot-noise",
-          { opacity: 0.12, scale: 0.6, duration: 0.8, ease: EASE, stagger: STAGGER },
+          scrub,
+          {
+            p: 1,
+            duration: 3.0,
+            ease: "none",
+            onUpdate: () => field.current?.setProgress(scrub.p),
+          },
           0.4,
         );
 
-        // The seven ring accounts migrate into formation.
-        gridPositions.slice(0, RING_DOTS).forEach((from, i) => {
-          const to = ringPositions[i];
-          tl.to(
-            `.rs-dot[data-index="${i}"]`,
-            {
-              x: to.x - from.x,
-              y: to.y - from.y,
-              duration: 1.1,
-              ease: EASE,
-            },
-            0.5 + i * 0.05,
-          );
-        });
-
-        // The shared attributes appear, then the edges write themselves in.
-        tl.to(".rs-hub", { opacity: 1, duration: 0.5, ease: EASE }, 1.5)
-          .to(".rs-hub-glow", { opacity: 1, duration: 0.8, ease: EASE }, 1.6)
-          .to(
-            ".rs-edge",
-            { strokeDashoffset: 0, duration: 0.9, ease: EASE, stagger: STAGGER },
-            1.7,
-          )
-          .to(".rs-cap-mechanism", { opacity: 0, y: -20, duration: 0.5, ease: EASE }, 3.1)
+        tl.to(".rs-cap-mechanism", { opacity: 0, y: -20, duration: 0.5, ease: EASE }, 3.1)
           .to(".rs-cap-verdict", { opacity: 1, y: 0, duration: 0.6, ease: EASE }, 3.4);
       });
 
@@ -124,16 +146,7 @@ export default function Landing() {
       // Pinning a scrubbed timeline on a phone fights the browser's own scroll
       // handling and janks; the argument reads perfectly well as a static image.
       mm.add(REDUCED_OR_SMALL, () => {
-        gsap.set(".rs-dot-noise", { opacity: 0.12, scale: 0.6 });
-        gridPositions.slice(0, RING_DOTS).forEach((from, i) => {
-          const to = ringPositions[i];
-          gsap.set(`.rs-dot[data-index="${i}"]`, {
-            x: to.x - from.x,
-            y: to.y - from.y,
-          });
-        });
-        gsap.set(".rs-hub, .rs-hub-glow", { opacity: 1 });
-        gsap.set(".rs-edge", { strokeDashoffset: 0 });
+        field.current?.setProgress(1);
         gsap.set(".rs-cap-problem", { opacity: 0 });
         gsap.set(".rs-cap-mechanism", { opacity: 0 });
         gsap.set(".rs-cap-verdict", { opacity: 1, y: 0 });
@@ -269,26 +282,26 @@ export default function Landing() {
             <Caption
               className="rs-cap-problem"
               step="01 — the problem"
-              title="Eighteen transactions. Every one of them approved."
-              body="Scored individually, none of these crosses a threshold. Small amounts, valid cards, nothing out of policy. A per-transaction model clears all eighteen and moves on."
+              title={`${total.toLocaleString()} transactions. Every one of them approved.`}
+              body={`Scored individually, not one of these crosses a threshold. Small amounts, valid cards, nothing out of policy. A per-transaction model clears all ${total.toLocaleString()} and moves on.`}
               initialOpacity={1}
             />
             <Caption
               className="rs-cap-mechanism"
               step="02 — the mechanism"
-              title="The same eighteen, seen as a graph."
-              body="Seven of them share a card and a device. Nothing new has been added — the data was always this shape. The connections were simply never looked at."
+              title={`The same ${total.toLocaleString()}, seen as a graph.`}
+              body={`${ringTransactions.toLocaleString()} of them run through accounts that share a device, an address, or a card. Nothing new has been added — the data was always this shape. The connections were simply never looked at.`}
             />
             <Caption
               className="rs-cap-verdict"
               step="03 — the flag"
               title="That convergence is the whole signal."
-              body="Seven accounts funnelling through two shared attributes, at 1.6-second intervals. RingSentinel scores the cluster, not the payment, and hands it to a human."
+              body={`${ringCount} rings, ${ringAccounts} accounts, funnelling through the attributes they share. RingSentinel scores the cluster, not the payment, and hands every one of them to a human.`}
             />
           </div>
 
           <div className="rs-graph-frame">
-            <RingGraph />
+            <TransactionField ref={field} corpus={corpus} />
           </div>
           </div>
         </section>

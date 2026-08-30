@@ -129,6 +129,19 @@ export interface Counterfactual {
   } | null;
 }
 
+/** Mirrors CorpusShape in components/landing/TransactionField. */
+export interface CorpusShape {
+  totals: { transactions: number; entities: number; entity_links: number };
+  normal_transactions: number;
+  rings: {
+    ring: string;
+    pattern: string;
+    cadence: string;
+    transactions: number;
+    accounts: number;
+  }[];
+}
+
 export interface ClusterDetail {
   cluster: {
     id: string;
@@ -316,6 +329,9 @@ export const api = {
 
   /** Fetched on demand, not with the detail — it verifies the whole chain. */
   evidencePack: (id: string) => get<EvidencePack>(`/clusters/${id}/evidence-pack`),
+
+  /** Corpus shape for the landing field. No labels leave this endpoint. */
+  corpus: () => get<CorpusShape>("/eval/corpus"),
 
   scorecard: () => get<Scorecard>("/eval/scorecard"),
 

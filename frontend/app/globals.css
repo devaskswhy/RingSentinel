@@ -7,7 +7,7 @@
    --------------------------------------------------------------------------- */
 
 :root {
-  /* One accent. There is no second one, on purpose. */
+  /* The product accent. See the three-colour rule immediately below. */
   --accent: #2dd4bf;
   --accent-dim: #14b8a6;
   --accent-glow: rgba(45, 212, 191, 0.14);
@@ -53,11 +53,11 @@
   --shell-max: 1600px;
   --shell-pad: clamp(1.5rem, 5vw, 5rem);
 
-  /* Hard ceiling on the landing graph's rendered height. The SVG's height is
+  /* Hard ceiling on the transaction field's rendered height. Its height is
      derived from its width, so without this it grows past the viewport on a
      wide monitor and gets clipped by the pinned section. */
   --graph-max-h: min(56svh, 520px);
-  --graph-aspect: 1.7857; /* 1000 / 560, the RingGraph viewBox */
+  --graph-aspect: 1.7857; /* 16:9-ish; the transaction field's frame */
 
   --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
@@ -156,13 +156,17 @@ h1, h2, h3, h4 {
   }
 }
 
-/* Constrain by WIDTH to bound the HEIGHT. The SVG scales from its viewBox, so
-   capping max-height alone would letterbox it; capping the width at
-   height x aspect keeps it whole and centred. */
+/* Constrain by WIDTH to bound the HEIGHT: the frame's aspect ratio turns a
+   width cap into a height cap, which is what keeps the field inside the pinned
+   viewport on a wide display. */
 .rs-graph-frame {
   width: 100%;
   max-width: calc(var(--graph-max-h) * var(--graph-aspect));
+  /* A canvas has no intrinsic size, so the frame has to declare one. The
+     aspect ratio plus the width cap together bound the height. */
+  aspect-ratio: var(--graph-aspect);
   margin-inline: auto;
+  position: relative;
 }
 
 /* ---------------------------------------------------------------------------
