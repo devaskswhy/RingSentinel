@@ -156,6 +156,19 @@ evidence and overclaiming. The cases are inserted through the real ingest path,
 measured, and rolled back — nothing persists, so the held-out numbers stay
 untouched and every stored transaction still traces to a real Razorpay order.
 
+**9. Cost it out**
+
+```bash
+docker compose exec backend python -m scripts.monetization \
+    --merchants 50 --transactions 2000
+```
+
+Estimates what scanning a merchant portfolio would expose and what it would
+cost to run. Every input is tagged `[INPUT]`, `[MEASURED]`, `[PRICING]`, or
+`[ASSUMPTION]` — the default 0.3% ring-fraud rate is illustrative and should not
+be quoted as a researched figure. [MONETIZATION.md](MONETIZATION.md) covers the
+pricing shapes and where this fits Razorpay's Agent Studio partner pathway.
+
 **Verification scripts** — each proves an invariant rather than asserting it:
 
 ```bash

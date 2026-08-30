@@ -176,3 +176,17 @@ shared infrastructure without either learning who the other's customers are.
 That is a network only an aggregator sitting across many merchants could
 assemble — which is a different and more defensible product than a tool sold one
 merchant at a time.
+
+[MONETIZATION.md](MONETIZATION.md) works that through: three pricing shapes,
+where the Agent Studio partner pathway fits, and an arithmetic sanity check with
+every input tagged as measured, priced, or assumed.
+
+```bash
+docker compose exec backend python -m scripts.monetization --merchants 50 --transactions 2000
+```
+
+The number that shapes the argument: at 100,000 transactions a month the model
+bill is **$0.07** and the analyst bill for the clusters it surfaces is
+**₹1,442** — human attention costs ~219× what the tokens do. So this cannot be
+priced cost-plus, and precision is the product rather than a metric, because
+every false flag spends the expensive resource rather than the cheap one.

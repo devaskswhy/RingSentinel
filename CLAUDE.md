@@ -72,6 +72,7 @@ RingSentinel/
 ├── README.md              <- setup steps only
 ├── ARCHITECTURE.md        <- system shape, failure table, positioning
 ├── BLINDSPOTS.md          <- GENERATED. Do not hand-edit; see §5k
+├── MONETIZATION.md        <- pricing shapes + Agent Studio pathway (§5l)
 ├── .env.example           <- every required variable, with provenance comments
 ├── docker-compose.yml     <- db + backend + frontend
 ├── backend/
@@ -125,6 +126,7 @@ RingSentinel/
 │       ├── evaluate_detection.py          <- measure vs ground truth
 │       ├── report.py                      <- paste-ready evaluation summary
 │       ├── measure_blindspots.py          <- writes BLINDSPOTS.md (--stdout)
+│       ├── monetization.py                <- cost/exposure calculator (§5l)
 │       ├── demo_reset.py                  <- 3 curated clusters for a take
 │       ├── simulate_agent_cadence.py      <- live 4.0s-interval demo
 │       ├── verify_ingest.py               <- ingest self-test, rolls back
@@ -917,6 +919,10 @@ curl 'localhost:8000/metrics?recompute=true'   # fresh, unstored
 docker compose exec -T backend python -m scripts.measure_blindspots \
     --stdout > BLINDSPOTS.md
 docker compose exec backend python -m scripts.verify_explanation_grader
+
+# Phase 11 - monetization arithmetic. No database writes, no model calls.
+docker compose exec backend python -m scripts.monetization \
+    --merchants 50 --transactions 2000
 ```
 
 Snapshots are stored in `evaluation_runs` so a reported number cannot silently
@@ -1226,7 +1232,7 @@ hook, and RingSentinel already meets the bar the draft describes.
 ## 5k. Phase 9 — measuring the blind spots
 
 A clean number invites the suspicion that the test was easy, and the held-out
-result (4/4 rings, 0 false flags) is very clean. This phase exists to attack
+result (4/4 rings, 0 false flags) is very clean. This phase exists to answer
 that suspicion with evidence rather than assurance: three cases built to sit
 exactly where the Phase 3 scoring is weakest, plus a mechanical audit of what
 Claude actually wrote in the case files.
@@ -1307,12 +1313,33 @@ Two honest limits, both reported in the document itself:
 
 ### Defensive-only, stated where it can be checked
 
-`grep -ri attack` and `grep -riE 'evade|evasion'` both return nothing across the
-repo — the one prior occurrence was a disclaimer in
-`scripts/simulate_agent_cadence.py`, reworded so a literal grep passes. The
-README carries the claim explicitly: no evasion guidance is produced anywhere
-here, all traffic is local test-mode only, and nothing in the codebase can
-block, freeze, or decline a customer.
+**Correcting an overstated claim made here earlier.** This section first said a
+literal `grep -ri` for offensive vocabulary "returns nothing across the repo".
+That was true of the *code* when it was checked, and false by the end of the
+same commit — because the README sentence the phase required ("no evasion
+guidance is produced anywhere in this repository") necessarily contains the very
+word being grepped for. A claim that a string is absent cannot survive writing
+the policy down. It was wrong to state it that way.
+
+The accurate and still-strong version: **every occurrence of that vocabulary in
+this repository is a disclaimer stating the policy, never a description of
+behaviour.** Run it and read the hits:
+
+```bash
+grep -rin --exclude-dir=.git --exclude-dir=node_modules -e 'attack' -e 'evade' -e 'evasion' .
+```
+
+The hits are the README's defensive-only notice, this section, and §5k's
+description of it. The one occurrence that was genuinely in code — a disclaimer
+in `scripts/simulate_agent_cadence.py` — was reworded to say "bypasses" instead,
+because a disclaimer is a better place for plain language than for a word the
+policy is about.
+
+What the repo actually guarantees, and this part is mechanical rather than
+lexical: no evasion guidance is produced anywhere here, all traffic is local
+test-mode only, and nothing in the codebase can block, freeze, or decline a
+customer — that last one enforced by `trg_clusters_status_human_only` and proven
+by `scripts/verify_human_gate.py`, not by a word search.
 
 ### ⚠️ Where BLINDSPOTS.md gets written
 
@@ -1322,6 +1349,77 @@ wrote to the container's ephemeral filesystem and produced nothing. The script
 now emits the document on **stdout** (`--stdout`, progress to stderr) so the
 host redirects it. This deliberately avoids mounting the repo root, which would
 expose `.env` and `.git` to the backend container for no reason.
+
+---
+
+## 5l. Phase 11 — monetization
+
+[MONETIZATION.md](MONETIZATION.md) plus `scripts/monetization.py`, a calculator
+that turns "this could make money" into arithmetic an interviewer can check.
+
+```bash
+docker compose exec backend python -m scripts.monetization \
+    --merchants 50 --transactions 2000
+docker compose exec backend python -m scripts.monetization --json
+```
+
+### Every line carries its provenance
+
+Four tags, applied to every input: `[INPUT]` (passed on the command line),
+`[MEASURED]` (observed on this project), `[PRICING]` (published rate card,
+cited), `[ASSUMPTION]` (illustrative, not researched). The tags are the point —
+the headline is only as good as the assumption under it, and a reader who cannot
+tell which is which has no way to disagree with the parts they doubt.
+
+### At 50 merchants × 2,000 transactions/month
+
+| | Value | Where it comes from |
+|---|---|---|
+| Ring-fraud rate | 0.30% | **ASSUMPTION** — illustrative, not researched |
+| Fraud value exposed | ₹2,90,505/mo | derived, ₹968 mean ring ticket (measured, this corpus) |
+| Clusters to review | 6/mo | derived, 49.9 ring txns per ring (measured, this corpus) |
+| Claude cost | **$0.07/mo** warm, $0.25 cold | Sonnet $2/$10 on a measured 12,730/991 token profile |
+| Analyst cost | ₹1,442/mo | ₹240/cluster, from `evaluation/cost.py` |
+
+### The two findings worth quoting
+
+**Human attention costs ~219× what the tokens do.** So RingSentinel cannot be
+priced cost-plus — a margin on $0.07 is not a business — and precision is the
+product rather than a metric, because every false flag spends the expensive
+resource, not the cheap one.
+
+**The same volume scored per-transaction would cost ~$160/mo against $0.07** —
+roughly 2,100×. Detection makes no model calls at all; Claude runs once per
+flagged cluster. That ratio is a property of the graph design, not an
+optimisation.
+
+### ⚠️ Language that must not slip
+
+"Fraud value **exposed**" means surfaced to a human. Not recovered, not
+prevented, not saved — invariant #1 means no code path can act on an account.
+This is also why the doc argues **against** revenue-share pricing: RingSentinel
+prevents nothing measurable, so "share of fraud prevented" would be a
+negotiation rather than a measurement, and it would reward flagging
+aggressively — the opposite of what the precision claim rests on.
+
+### Verified citations
+
+- Sonnet **$2/$10 per Mtok**; caching multipliers 1.25× write (5-min), 0.1× read
+  — `platform.claude.com/docs/en/about-claude/pricing`, checked 2026-08-30.
+  Batch API would halve again; deliberately **not** applied, so the estimate
+  errs high.
+- Agent Studio's three routes are *"Customize a Prebuilt Agent"*, *"Build your
+  agent from scratch"* (beta), *"Onboard as an AI partner"* — fetched from
+  `razorpay.com/agent-studio/`. Note these are **not** the phrases the brief
+  used; the page's own wording is what is cited.
+- Razorpay's launch post (12 March 2026) states Agent Studio is *"Built on
+  Anthropic's Claude Agent SDK"* and *"will also evolve into an open ecosystem
+  for developers and fintech partners"* publishing *"specialized agents, from
+  industry-specific fraud detection systems to automated tax reconciliation
+  tools"*. Quoted directly rather than paraphrased from press coverage.
+
+Still: **Razorpay has not reviewed or endorsed this project**, and no customer
+has been asked what they would pay.
 
 ---
 
@@ -1408,7 +1506,7 @@ docker compose exec backend alembic upgrade head
 | **13** | Resilience proof, counterfactual field, positioning in `ARCHITECTURE.md` (§5i) | **Done** |
 | **12** | Tamper-evident evidence pack: audit hash chain, schema-level verification (§5j) | **Done** |
 | **9** | Blind-spot measurement: 3 robustness cases, explanation-quality audit, `BLINDSPOTS.md` (§5k) | **Done** |
-| **11** | Monetization calculator + `MONETIZATION.md` | Not started — the one to cut if short on time |
+| **11** | Monetization calculator + `MONETIZATION.md` (§5l) | **Done** |
 
 **Phase 1 constraints that were deliberately honoured:** no fake/mock data, no
 UI beyond a placeholder page, no detection logic. Do not "helpfully" add these
