@@ -58,10 +58,18 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    # Same search_path pinning as app/db.py, for the same reason and by the
+    # same argument: there are two ways into this database and both need it.
+    # Alembic builds its own engine, so the connect_args set on the application
+    # engine never reach it — migrations connected with whatever search_path a
+    # pooled session was left holding and failed with "no schema has been
+    # selected to create in" while trying to create alembic_version, a table
+    # that already existed and simply could not be seen.
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={"options": "-c search_path=public"},
     )
     with connectable.connect() as connection:
         context.configure(
