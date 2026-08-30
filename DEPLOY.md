@@ -77,6 +77,26 @@ or address exists anywhere in the schema by construction.
 The backend runs `alembic upgrade head` on start (`entrypoint.sh`), so the
 schema is created before the seed is loaded.
 
+### Set search_path on the role, once
+
+After creating the database, run this once:
+
+```sql
+ALTER ROLE neondb_owner SET search_path = public;
+```
+
+`pg_dump` emits `set_config('search_path', '', false)` — session-wide, not
+transaction-local — so a pooled session handed back after a restore resolves no
+unqualified table name. Every data endpoint then returns 500 while `/health/db`
+keeps working, because it queries `information_schema` explicitly, and the next
+deploy dies in Alembic with *"no schema has been selected to create in"* while
+trying to create a table that already exists.
+
+The application and Alembic both issue `SET search_path TO public` on connect,
+so they are covered either way. Setting it on the role covers everything else —
+psql, a future restore, anything added later. It must be a statement, never a
+connection option: Neon's pooler rejects `options=-c search_path` at startup.
+
 ## 2. Backend
 
 Render web service, from `backend/`:

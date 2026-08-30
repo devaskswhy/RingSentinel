@@ -69,9 +69,11 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"options": "-c search_path=public"},
     )
     with connectable.connect() as connection:
+        # As a statement, not a startup parameter: Neon's pooler rejects
+        # options=-c search_path and the deploy dies before migrating.
+        connection.exec_driver_sql("SET search_path TO public")
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
