@@ -5,7 +5,8 @@ Two surfaces, deployed differently on purpose.
 | | Where | Why |
 |---|---|---|
 | Frontend | Vercel (free) | Static Next.js. No cold start, so a judge clicking a link waits for nothing. |
-| Backend + Postgres | Render (free) | Needs a database and a long-running process. |
+| Backend | Render (free) | Needs a long-running process and a container runtime. |
+| Postgres | **Neon** (free) | Render's free Postgres **expires after 30 days**. Neon's free tier is permanent, and a submission a judge opens six weeks later must still work. |
 
 The landing page is deliberately **not dependent on the backend** — it renders
 the real corpus figures, all twelve cluster scores and the real-data section
@@ -42,15 +43,31 @@ concern.
 
 ---
 
-## 1. Database
+## 1. Database — Neon, not Render
 
-Create a free Postgres on Render. Then, from this repo:
+Render's free Postgres is deleted after 30 days. That is fine for a sprint and
+wrong for a submission someone may open weeks after it was made, so the
+database lives on Neon instead: the free tier is permanent, 0.5 GB per project
+against a 1.3 MB seed, and no card is required.
+
+Neon scales compute to zero after five minutes idle and wakes on the next
+connection. `pool_pre_ping` is already on in `app/db.py`, so a connection that
+went away while idle is replaced rather than raising — the same mechanism
+`scripts/verify_resilience.py` proves against a killed backend.
+
+Create a project, copy the connection string, and load the seed:
 
 ```bash
 # migrations first — the schema, triggers and the label-free view
 docker compose exec backend alembic upgrade head          # locally, to check
-psql "$RENDER_DATABASE_URL" -f backend/deploy/seed-dump.sql
+psql "$NEON_DATABASE_URL" -f backend/deploy/seed-dump.sql
 ```
+
+Paste Neon's URL exactly as given. It arrives as `postgresql://…?sslmode=require`,
+which SQLAlchemy would read as psycopg2 — a driver this project does not install.
+`app/config.py` rewrites the scheme to `postgresql+psycopg://` and leaves the
+query string alone, verified against Neon's direct, pooled and `postgres://`
+forms. There is nothing to edit by hand.
 
 `backend/deploy/seed-dump.sql` is the seeded corpus: 1,499 transactions from
 real Razorpay test-mode orders, 635 entities, 12 clusters and their case files.
@@ -66,7 +83,7 @@ Render web service, from `backend/`:
 
 | Variable | Value |
 |---|---|
-| `DATABASE_URL` | the Render Postgres internal URL |
+| `DATABASE_URL` | the Neon connection string, pasted as-is |
 | `CLAUDE_GENERATION_ENABLED` | `false` |
 | `APP_ENV` | `production` |
 | `RAZORPAY_KEY_ID` / `_SECRET` | **omit** — nothing on the deployed path creates orders |
