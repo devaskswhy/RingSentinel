@@ -26,6 +26,7 @@ import {
 import { DURATION, EASE_OUT, STAGGER } from "@/lib/tokens";
 import ClusterDetail from "@/components/console/ClusterDetail";
 import Orientation from "@/components/console/Orientation";
+import { prefersReducedMotion } from "@/lib/tokens";
 import Scorecard from "@/components/console/Scorecard";
 import { CadenceTag, ScoreBar, StatusTag } from "@/components/console/Bits";
 
@@ -52,6 +53,7 @@ export default function Console() {
   const [clusters, setClusters] = useState<ClusterSummary[]>([]);
   const [scorecard, setScorecard] = useState<ScorecardData | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [filter, setFilter] = useState<ClusterStatus | "all">("all");
   const [sort, setSort] = useState<SortKey>("score");
@@ -172,6 +174,29 @@ export default function Console() {
     });
   }, [clusters, filter, sort, asc]);
 
+  // Walking the queue in order is the point of the stacked layout: open one,
+  // read it, move to the next without going back up.
+  const position = selected ? visible.findIndex((c) => c.id === selected) : -1;
+  const prevId = position > 0 ? visible[position - 1].id : null;
+  const nextId =
+    position >= 0 && position < visible.length - 1 ? visible[position + 1].id : null;
+
+  function step(delta: number) {
+    const target = delta < 0 ? prevId : nextId;
+    if (target) setSelected(target);
+  }
+
+  // Bring the case into view when one is opened. Without this the detail
+  // renders below the fold and the click appears to do nothing at all.
+  useEffect(() => {
+    if (!selected || !detailRef.current) return;
+    detailRef.current.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
+  }, [selected]);
+
+
   const onReviewed = useCallback(async () => {
     await refresh();
     if (selected) await loadDetail(selected);
@@ -287,9 +312,9 @@ export default function Console() {
         <Scorecard data={scorecard} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.05fr) minmax(0, 1fr)", flex: 1 }}>
-        {/* ---- queue --------------------------------------------------- */}
-        <div style={{ borderRight: "1px solid var(--line)", padding: "1.25rem 1.5rem" }}>
+      <div style={{ flex: 1 }}>
+        {/* ---- queue, full width -------------------------------------- */}
+        <div className="rs-console-shell" style={{ paddingBlock: "1.75rem 2.5rem" }}>
           <div
             style={{
               display: "flex",
@@ -406,22 +431,48 @@ export default function Console() {
               <code>docker compose exec backend python -m scripts.detect</code>
             </div>
           )}
-        </div>
-
-        {/* ---- detail -------------------------------------------------- */}
-        <div style={{ padding: "1.25rem 1.5rem", minWidth: 0 }}>
-          {detail ? (
-            <ClusterDetail
-              detail={detail}
-              onReviewed={onReviewed}
-              onGenerated={() => selected && loadDetail(selected)}
-            />
-          ) : (
-            <div className="rs-mono" style={{ color: "var(--text-faint)" }}>
-              select a cluster
-            </div>
+          {!loading && visible.length > 0 && !selected && (
+            <p className="rs-queue-hint">
+              Select a cluster to open its full case below — the evidence, the
+              signals behind the score, the graph, and the decision.
+            </p>
           )}
         </div>
+
+        {/* ---- detail, full width, scrolled into view ------------------ */}
+        {detail && (
+          <div ref={detailRef} className="rs-detail-stage">
+            <div className="rs-console-shell">
+              <div className="rs-detail-nav">
+                <button onClick={() => step(-1)} disabled={!prevId} className="rs-focus rs-step-btn">
+                  ← previous
+                </button>
+                <span className="rs-mono" style={{ color: "var(--text-faint)" }}>
+                  cluster {position + 1} of {visible.length}
+                </span>
+                <button onClick={() => step(1)} disabled={!nextId} className="rs-focus rs-step-btn">
+                  next →
+                </button>
+                <button
+                  onClick={() => {
+                    setSelected(null);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="rs-focus rs-step-btn"
+                  style={{ marginLeft: "auto" }}
+                >
+                  ↑ back to the queue
+                </button>
+              </div>
+
+              <ClusterDetail
+                detail={detail}
+                onReviewed={onReviewed}
+                onGenerated={() => selected && loadDetail(selected)}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
