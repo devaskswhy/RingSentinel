@@ -18,6 +18,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Loader from "@/components/landing/Loader";
 import CorpusPanel from "@/components/landing/CorpusPanel";
+import ThresholdScrubber, {
+  FALLBACK_SCORES,
+} from "@/components/landing/ThresholdScrubber";
 import WhyUs from "@/components/landing/WhyUs";
 import TransactionField, {
   FALLBACK_CORPUS,
@@ -45,6 +48,7 @@ export default function Landing() {
   // opens, and a blank hero because a container was restarting would be a
   // self-inflicted wound.
   const [corpus, setCorpus] = useState<CorpusShape>(FALLBACK_CORPUS);
+  const [scores, setScores] = useState<number[]>(FALLBACK_SCORES);
 
   // Every number in the sequence captions is derived from the same object the
   // field is drawn from, so the copy cannot drift from what is on screen. The
@@ -66,6 +70,16 @@ export default function Landing() {
       .catch(() => {
         /* keep the fallback; the shape is the same */
       });
+
+    api
+      .listClusters()
+      .then((list) => {
+        if (!cancelled && list.length) setScores(list.map((c) => c.score));
+      })
+      .catch(() => {
+        /* the fallback holds the same measured scores */
+      });
+
     return () => {
       cancelled = true;
     };
@@ -395,6 +409,8 @@ export default function Landing() {
         </section>
 
         <WhyUs />
+
+        <ThresholdScrubber scores={scores} />
 
         {/* ---- CTA ----------------------------------------------------- */}
         <section
