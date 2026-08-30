@@ -74,6 +74,10 @@ ATTRIBUTE_WEIGHTS: dict[str, float] = {
 #: Saturation constant for reuse strength f(k) = (k-1)/(k-1+K), where k is the
 #: number of distinct customers sharing one attribute. Lower K saturates faster.
 #:   K=2 ->  k=2:0.33  k=3:0.50  k=4:0.60  k=5:0.67  k=7:0.75  k=9:0.80
+#: Off by default. Turning this on changes every score in the system, so it is
+#: measured before it is adopted rather than after.
+POPULATION_RELATIVE_REUSE = False
+
 REUSE_SATURATION_K = 2.0
 
 #: An attribute must be touched by at least this many distinct customers before
@@ -213,6 +217,11 @@ class DetectorConfig:
         default_factory=lambda: dict(ATTRIBUTE_WEIGHTS)
     )
     reuse_saturation_k: float = REUSE_SATURATION_K
+    #: Score attribute reuse against the observed distribution of its own type
+    #: rather than an absolute curve. Default OFF so every committed result
+    #: stands unchanged until this has been measured on both corpora - see
+    #: detection/population.py and scripts/evaluate_ieee.py.
+    population_relative_reuse: bool = POPULATION_RELATIVE_REUSE
     min_customers_per_shared_attribute: int = MIN_CUSTOMERS_PER_SHARED_ATTRIBUTE
 
     min_transactions_for_timing: int = MIN_TRANSACTIONS_FOR_TIMING

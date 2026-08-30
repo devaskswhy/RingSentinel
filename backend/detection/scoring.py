@@ -225,7 +225,10 @@ def _reuse_strength(customer_count: int, config: DetectorConfig) -> float:
 
 
 def find_shared_attributes(
-    cluster: CandidateCluster, bundle: GraphBundle, config: DetectorConfig
+    cluster: CandidateCluster,
+    bundle: GraphBundle,
+    config: DetectorConfig,
+    population: AttributePopulation | None = None,
 ) -> list[SharedAttribute]:
     """Identify every attribute that multiple accounts in the cluster share."""
     customer_set = set(cluster.customers)
@@ -245,6 +248,10 @@ def find_shared_attributes(
             cluster.subgraph[attribute][c].get("weight", 1) for c in touching
         )
         strength = _reuse_strength(len(touching), config)
+        # An attribute must be both structurally significant AND unusual for
+        # its population. Saturation alone is what collapsed on real data.
+        if config.population_relative_reuse and population is not None:
+            strength *= population.rarity(kind, len(touching))
         weight = config.attribute_weights.get(kind, 0.5)
 
         shared.append(
@@ -331,11 +338,12 @@ def score_cluster(
     bundle: GraphBundle,
     baseline: TimingBaseline,
     config: DetectorConfig,
+    population: AttributePopulation | None = None,
 ) -> ScoredCluster:
     """Score one candidate cluster and assemble its evidence."""
     from detection.baseline import cluster_timing
 
-    shared = find_shared_attributes(cluster, bundle, config)
+    shared = find_shared_attributes(cluster, bundle, config, population)
     reuse = attribute_reuse_signal(shared)
     concentration = concentration_signal(cluster, shared, bundle)
 

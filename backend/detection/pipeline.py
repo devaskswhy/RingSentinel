@@ -41,6 +41,7 @@ from detection.baseline import TimingBaseline, population_baseline
 from detection.clustering import find_clusters
 from detection.config import DetectorConfig
 from detection.graph import GraphBundle, load_graph
+from detection.population import build_population
 from detection.scoring import ScoredCluster, score_cluster
 
 log = logging.getLogger(__name__)
@@ -95,7 +96,16 @@ def run_detection(
     baseline = population_baseline(bundle.customer_timestamps, config)
     candidates = find_clusters(bundle, config)
 
-    scored = [score_cluster(c, bundle, baseline, config) for c in candidates]
+    # Built once from the whole graph: the question is whether an attribute is
+    # unusual for this merchant, so a per-cluster comparison would be circular.
+    population = (
+        build_population(bundle.graph, bundle.node_type)
+        if config.population_relative_reuse
+        else None
+    )
+    scored = [
+        score_cluster(c, bundle, baseline, config, population) for c in candidates
+    ]
     scored.sort(key=lambda s: s.score, reverse=True)
     flagged = [s for s in scored if s.score >= config.score_threshold]
 

@@ -84,6 +84,16 @@ class IeeeRow:
     device_ref: str | None
 
 
+#: ⚠ IEEE-CIS `addr1` is a COARSE BILLING REGION, not a delivery address.
+#: Its median is 4 accounts and its maximum is 299 in a 20k slice, because it
+#: identifies an area rather than a household. Mapping it onto RingSentinel's
+#: `address` entity — which means "the same delivery address" — connected every
+#: account in a region to every other and produced 282-account clusters. That
+#: was an error in this adapter, not in the detector: the two fields carry the
+#: same name and completely different meanings. Off by default for that reason.
+MAP_ADDR1_AS_ADDRESS = False
+
+
 @dataclass
 class IeeeCorpus:
     rows: list[IeeeRow] = field(default_factory=list)
@@ -111,7 +121,9 @@ def load_identity(limit: int | None = None) -> dict[str, str]:
     return out
 
 
-def load_corpus(limit: int | None = 100_000) -> IeeeCorpus:
+def load_corpus(
+    limit: int | None = 100_000, map_address: bool = MAP_ADDR1_AS_ADDRESS
+) -> IeeeCorpus:
     """Stream the CSV into rows. Never loads the whole file into memory."""
     devices = load_identity()
     corpus = IeeeCorpus()
@@ -146,7 +158,7 @@ def load_corpus(limit: int | None = 100_000) -> IeeeCorpus:
                     amount_paise=max(0, amount),
                     customer_ref=_ref("cust", f"{row['card1']}|{row.get('addr1','')}"),
                     instrument_ref=_ref("inst", card),
-                    address_ref=_ref("addr", addr),
+                    address_ref=_ref("addr", addr) if map_address else None,
                     device_ref=_ref("dev", device) if device else None,
                 )
             )
