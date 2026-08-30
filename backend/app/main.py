@@ -53,7 +53,13 @@ EXPECTED_TABLES = (
 )
 
 
-@app.get("/")
+# GET and HEAD. Render health-checks with HEAD, and a GET-only route answers
+# 405 — which the platform reads as unhealthy and responds to by intermittently
+# pulling the instance out of rotation. That surfaced as roughly one request in
+# eight returning a fast 404 from a route that was demonstrably registered, on
+# an app that was otherwise answering in under a second. Starlette does not add
+# HEAD automatically here, so it is declared.
+@app.api_route("/", methods=["GET", "HEAD"])
 def root() -> dict:
     return {
         "service": "ringsentinel-api",
@@ -63,7 +69,7 @@ def root() -> dict:
     }
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health() -> dict:
     """Liveness - does the process respond at all."""
     return {"status": "ok", "env": settings.app_env}
