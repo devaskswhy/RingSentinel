@@ -71,6 +71,18 @@ class Settings(BaseSettings):
     #: Claude output, generated locally — only new generation is refused.
     claude_generation_enabled: bool = True
 
+    #: Browser origins allowed to call this API. Comma-separated in the
+    #: environment (CORS_ORIGINS). Localhost is kept so a developer running the
+    #: frontend against a deployed backend still works; a deployment adds its
+    #: own origin rather than editing code. Never "*": these endpoints include
+    #: the human review actions, and a wildcard would let any page on the
+    #: internet post an approval from a logged-in reviewer's browser.
+    cors_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     @property
     def razorpay_is_test_mode(self) -> bool:
         """Guard used by the ingest layer so a live key can never be used."""
