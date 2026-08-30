@@ -5,7 +5,24 @@ Every value here has a matching entry in the repo-root .env.example.
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _normalise_database_url(url: str) -> str:
+    """Upgrade a bare postgres URL to the psycopg3 driver.
+
+    Managed hosts hand out `postgresql://...` (and Heroku-style `postgres://`).
+    SQLAlchemy reads both as psycopg2, which this project does not install — it
+    pins psycopg3 — so the app would fail at startup with a driver error that
+    says nothing about the cause. Rewriting here means the operator pastes the
+    URL the host gave them and it works.
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
 
 
 class Settings(BaseSettings):
@@ -24,6 +41,11 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://ringsentinel:ringsentinel@db:5432/ringsentinel"
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def _fix_driver(cls, v: str) -> str:
+        return _normalise_database_url(v)
 
     # ---- Razorpay (TEST MODE ONLY) ----
     # Phase 2. Key ids must begin with "rzp_test_"; live keys are never valid here.
