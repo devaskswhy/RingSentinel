@@ -250,13 +250,6 @@ export default function Landing() {
           </div>
 
           </div>
-
-          <div
-            className="rs-shell rs-label"
-            style={{ position: "absolute", bottom: "2.5rem", left: 0, right: 0 }}
-          >
-            Scroll
-          </div>
         </section>
 
         {/* ---- Pinned sequence ----------------------------------------- */}
@@ -505,31 +498,46 @@ function Caption({
  * governed by a Usage Agreement they do not publish. In the footer, next to the
  * test-mode notice, it is plainly a credit — which is what it is.
  *
- * The mark is optional at runtime. If `public/razorpay-logo.svg` is absent the
- * image removes itself and the wordmark alone carries the line, so the footer
- * is never broken by a missing asset.
+ * On the asset itself: the supplied razorpay.png is a 1024x1024 image with a
+ * solid white background, no alpha, and the mark occupying only the middle 26%
+ * — dropped straight onto this footer it is a white block with a mark too small
+ * to read. So it is cropped to its ink bounds and set on a deliberate white
+ * chip, which is an ordinary badge treatment and reads as intentional.
+ *
+ * The chip is a workaround, not a preference. Replace the file with the
+ * reversed (light-on-dark) wordmark from Razorpay's brand kit and the chip can
+ * go — see public/README.md. Recolouring their mark to suit our background is
+ * not an option; brand guidelines generally forbid it, and the reversed variant
+ * exists precisely for this.
  */
 function BuildathonCredit() {
   return (
     <span
       className="rs-label"
-      style={{ display: "inline-flex", alignItems: "center", gap: "0.55rem" }}
+      style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
     >
       Built for the
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/razorpay-logo.svg"
-        alt="Razorpay"
-        height={14}
-        style={{ height: 14, width: "auto", opacity: 0.75, display: "block" }}
-        onError={(e) => {
-          e.currentTarget.style.display = "none";
-          const next = e.currentTarget.nextElementSibling as HTMLElement | null;
-          if (next) next.style.display = "inline";
+      <span
+        aria-label="Razorpay"
+        role="img"
+        title="Razorpay"
+        style={{
+          // Ink measured at x 268..755, y 236..792 of a 1024 square. Sizing to
+          // 100/47.7% and 100/54.4% scales that region to fill the chip.
+          width: 17,
+          height: 19,
+          backgroundImage: "url(/razorpay.png)",
+          backgroundSize: "209.8% 183.8%",
+          backgroundPosition: "50% 50.5%",
+          backgroundRepeat: "no-repeat",
+          backgroundColor: "#fff",
+          borderRadius: 3,
+          padding: 3,
+          boxSizing: "content-box",
+          flex: "none",
         }}
       />
-      <span style={{ display: "none" }}>Razorpay</span>
-      AI Buildathon
+      Razorpay AI Buildathon
     </span>
   );
 }

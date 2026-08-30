@@ -1,13 +1,18 @@
 # Static assets
 
-## razorpay-logo.svg — not committed, and optional
+## razorpay.png — not committed, and optional
 
-Drop Razorpay's official logo here as `razorpay-logo.svg` and the landing page
+Drop Razorpay's official logo here as `razorpay.png` and the landing page
 footer will render it in the "Built for the Razorpay AI Buildathon" credit. If
 the file is absent the credit falls back to a plain wordmark, so nothing
 breaks — see `BuildathonCredit` in `app/page.tsx`.
 
 Download it from https://razorpay.com/newsroom/brand-assets/
+
+**Use the reversed (light-on-dark) variant.** The footer sits on a near-black
+background, so the standard navy wordmark is close to invisible there. Brand
+kits ship a white/reversed version for exactly this case — use that one rather
+than recolouring the standard mark, which brand guidelines generally prohibit.
 
 Two constraints worth keeping:
 
