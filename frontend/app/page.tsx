@@ -538,32 +538,48 @@ function Caption({
  * exists precisely for this.
  */
 function BuildathonCredit() {
+  // The chip renders only once the image is confirmed to load.
+  //
+  // public/razorpay.png is gitignored on purpose - it is Razorpay's trademark
+  // and their brand assets are governed by a Usage Agreement they do not
+  // publish - so it exists locally and NOT on the deployed site. A CSS
+  // background-image has no error event, so the deployed footer showed a blank
+  // white chip: the workaround for one problem became a different one. Probing
+  // the image first means the credit degrades to plain text where the asset is
+  // absent, which is exactly where it should.
+  const [hasMark, setHasMark] = useState(false);
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setHasMark(true);
+    img.src = "/razorpay.png";
+  }, []);
+
   return (
     <span
       className="rs-label"
       style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
     >
       Built for the
-      <span
-        aria-label="Razorpay"
-        role="img"
-        title="Razorpay"
-        style={{
-          // Ink measured at x 268..755, y 236..792 of a 1024 square. Sizing to
-          // 100/47.7% and 100/54.4% scales that region to fill the chip.
-          width: 17,
-          height: 19,
-          backgroundImage: "url(/razorpay.png)",
-          backgroundSize: "209.8% 183.8%",
-          backgroundPosition: "50% 50.5%",
-          backgroundRepeat: "no-repeat",
-          backgroundColor: "#fff",
-          borderRadius: 3,
-          padding: 3,
-          boxSizing: "content-box",
-          flex: "none",
-        }}
-      />
+      {hasMark && (
+        <span
+          aria-hidden="true"
+          style={{
+            // Ink measured at x 268..755, y 236..792 of a 1024 square.
+            width: 17,
+            height: 19,
+            backgroundImage: "url(/razorpay.png)",
+            backgroundSize: "209.8% 183.8%",
+            backgroundPosition: "50% 50.5%",
+            backgroundRepeat: "no-repeat",
+            backgroundColor: "#fff",
+            borderRadius: 3,
+            padding: 3,
+            boxSizing: "content-box",
+            flex: "none",
+          }}
+        />
+      )}
       Razorpay AI Buildathon
     </span>
   );
