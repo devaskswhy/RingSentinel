@@ -26,7 +26,11 @@ export function speechSupported(): boolean {
 
 /** Split on sentence ends, keeping chunks short enough for Chrome's cutoff. */
 function chunk(text: string, max = 180): string[] {
-  const sentences = text.replace(/\s+/g, " ").trim().match(/[^.!?]+[.!?]*/g) ?? [text];
+  // Japanese, Arabic and Hindi use their own sentence marks; splitting on the
+  // Latin set alone would hand the engine one enormous utterance and hit
+  // Chrome's cutoff.
+  const sentences =
+    text.replace(/\s+/g, " ").trim().match(/[^.!?。！？۔،؟।]+[.!?。！？۔؟।]*/g) ?? [text];
   const out: string[] = [];
   let buf = "";
   for (const s of sentences) {
@@ -61,18 +65,42 @@ function pickVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null 
   return pool[0] ?? null;
 }
 
-let cachedVoice: SpeechSynthesisVoice | null = null;
+let allVoices: SpeechSynthesisVoice[] = [];
 
-export function primeVoices(): void {
+export function primeVoices(onReady?: () => void): void {
   if (!speechSupported()) return;
   const load = () => {
-    cachedVoice = pickVoice(window.speechSynthesis.getVoices());
+    allVoices = window.speechSynthesis.getVoices();
+    if (allVoices.length) onReady?.();
   };
   load();
   // Chrome populates the list asynchronously; without this the first play uses
   // the default voice and every later one uses the good one, which is worse
   // than just always using the default.
-  window.speechSynthesis.addEventListener("voiceschanged", load, { once: true });
+  window.speechSynthesis.addEventListener("voiceschanged", load);
+}
+
+/**
+ * Which of our languages this device can actually speak.
+ *
+ * Offering a language with no installed voice would silently play nothing, or
+ * read the text with a wildly wrong accent. The card only lists what the
+ * browser can genuinely pronounce.
+ */
+export function availableLangs(codes: string[]): Set<string> {
+  const have = new Set<string>();
+  for (const v of allVoices) {
+    const prefix = (v.lang || "").slice(0, 2).toLowerCase();
+    if (codes.includes(prefix)) have.add(prefix);
+  }
+  return have;
+}
+
+function voiceFor(langPrefix: string): SpeechSynthesisVoice | null {
+  const matching = allVoices.filter(
+    (v) => (v.lang || "").slice(0, 2).toLowerCase() === langPrefix,
+  );
+  return pickVoice(matching.length ? matching : allVoices);
 }
 
 export function stopSpeaking(): void {
@@ -84,13 +112,20 @@ export function stopSpeaking(): void {
  * Speak `text`, calling `onEnd` when it finishes or is cancelled. Returns a
  * cancel function so a caller can stop it without touching the global queue.
  */
-export function speak(text: string, onEnd: () => void): () => void {
+export function speak(
+  text: string,
+  onEnd: () => void,
+  opts: { rate?: number; lang?: string } = {},
+): () => void {
   if (!speechSupported()) {
     onEnd();
     return () => {};
   }
   const synth = window.speechSynthesis;
   synth.cancel();
+
+  const langPrefix = (opts.lang ?? "en").slice(0, 2).toLowerCase();
+  const voice = voiceFor(langPrefix);
 
   const parts = chunk(text);
   let cancelled = false;
@@ -102,8 +137,11 @@ export function speak(text: string, onEnd: () => void): () => void {
       return;
     }
     const u = new SpeechSynthesisUtterance(parts[index++]);
-    if (cachedVoice) u.voice = cachedVoice;
-    u.rate = 1.0;
+    if (voice) u.voice = voice;
+    // Setting lang as well as voice matters: some engines fall back to the
+    // system default when only the voice is set.
+    u.lang = opts.lang ?? voice?.lang ?? "en-US";
+    u.rate = opts.rate ?? 1;
     u.pitch = 1.0;
     u.onend = next;
     // A failed utterance must not strand the UI in a "speaking" state.

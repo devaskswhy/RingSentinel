@@ -1020,7 +1020,60 @@ h1, h2, h3, h4 {
 }
 .rs-guide-x:hover { color: var(--text); }
 
-.rs-guide-list { list-style: none; margin: 0; padding: 0; flex: none; }
+.rs-guide-list { list-style: none; margin: 0; padding: 0; }
+.rs-guide-groups { flex: none; }
+
+.rs-guide-group-head {
+  padding: 0.75rem 1.1rem 0.4rem;
+  color: var(--text-faint);
+  border-top: 1px solid var(--line);
+}
+.rs-guide-groups > div:first-child .rs-guide-group-head { border-top: none; }
+
+/* Language and speed, on one row above the questions. */
+.rs-guide-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 1.1rem;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.rs-guide-controls select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--ink);
+  border: 1px solid var(--line-strong);
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+.rs-guide-controls select:hover { border-color: var(--accent); }
+
+.rs-guide-rates { display: flex; flex: none; }
+.rs-guide-rates button {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  background: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-right: none;
+  padding: 0.35rem 0.42rem;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.rs-guide-rates button:last-child { border-right: 1px solid var(--line-strong); }
+.rs-guide-rates button:hover { color: var(--text); }
+.rs-guide-rates button[data-on="true"] {
+  color: var(--ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Arabic transcripts read right to left. */
+.rs-guide-body p[dir="rtl"] { text-align: right; }
 .rs-guide-list > li { border-bottom: 1px solid var(--line); }
 .rs-guide-list > li:last-child { border-bottom: none; }
 

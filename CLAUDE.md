@@ -1557,6 +1557,35 @@ Two quirks it works around, both real:
 - Chrome silently stops an utterance at roughly fifteen seconds, so text is
   split into sentence-sized utterances and queued.
 
+### Speed, language, and what is not translated
+
+Playback runs at 0.5x, 1x, 1.5x, 1.75x or 2x, remembered between visits. Rate
+cannot change mid-utterance, so a change restarts the current answer.
+
+Eight languages — English, Hindi, Spanish, French, German, Portuguese,
+Japanese, Arabic — and the six page explainers are **really translated**, not
+an English script read by a foreign voice. Pointing `speechSynthesis` at
+English text with `lang="hi-IN"` produces phonetic nonsense, which is worse
+than offering English alone. Arabic transcripts render `dir="rtl"`.
+
+**Only languages the device has a voice for are listed.** `availableLangs()`
+filters against `getVoices()`, because offering one the browser cannot
+pronounce plays silence or reads in the wrong accent.
+
+⚠️ **Claude's case files are never translated.** The per-cluster answers are
+marked `englishOnly` and always spoken by an English voice, whatever the
+selector says, and the card labels them "Claude's case file · English only".
+Machine-translating them would make the spoken version differ from the
+artefact the audit log records — the whole reason for reading the case file
+aloud rather than paraphrasing it.
+
+### Per-cluster answers, built from stored evidence
+
+With a case open the card leads with three questions about *that* cluster:
+its case file spoken verbatim, what the graph shows (assembled from the real
+shared attributes and their counts), and how close the call was (the stored
+counterfactual). Page-level questions follow underneath.
+
 ### The transcript is never hidden behind the audio
 
 Someone on a silent laptop, someone deaf, and someone checking a number

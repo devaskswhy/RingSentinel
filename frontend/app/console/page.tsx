@@ -27,7 +27,7 @@ import { DURATION, EASE_OUT, STAGGER } from "@/lib/tokens";
 import ClusterDetail from "@/components/console/ClusterDetail";
 import Orientation from "@/components/console/Orientation";
 import VoiceGuide from "@/components/shared/VoiceGuide";
-import { CONSOLE_EXPLAINERS } from "@/lib/explainers";
+import { CONSOLE_EXPLAINERS, clusterExplainers } from "@/lib/explainers";
 import { prefersReducedMotion } from "@/lib/tokens";
 import Scorecard from "@/components/console/Scorecard";
 import { CadenceTag, ScoreBar, StatusTag } from "@/components/console/Bits";
@@ -506,7 +506,13 @@ export default function Console() {
           </div>
         )}
       </div>
-      <VoiceGuide topics={CONSOLE_EXPLAINERS} label="Help" />
+      {/* When a case is open the card leads with questions about THAT cluster,
+          built from its stored evidence, before the page-level ones. */}
+      <VoiceGuide
+        topics={CONSOLE_EXPLAINERS}
+        clusterTopics={detail ? clusterExplainers(detail) : []}
+        label={detail ? "Explain this" : "Help"}
+      />
     </div>
   );
 }
