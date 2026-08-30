@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Loader from "@/components/landing/Loader";
+import WhyUs from "@/components/landing/WhyUs";
 import TransactionField, {
   FALLBACK_CORPUS,
   type CorpusShape,
@@ -388,6 +389,8 @@ export default function Landing() {
           </div>
           </div>
         </section>
+
+        <WhyUs />
 
         {/* ---- CTA ----------------------------------------------------- */}
         <section
