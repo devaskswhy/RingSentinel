@@ -714,7 +714,9 @@ numeric half for GSAP, which needs real values rather than `var()` strings.
 
 | Token | Value |
 |---|---|
-| Accent | **`#2dd4bf`** — one accent, no second one |
+| Accent | **`#3395ff`** — Razorpay's brand blue (see §5m) |
+| Signal | `#e8a33d` — "a human must look at this", and nothing else |
+| Danger | `#e5484d` — an operation failed |
 | Ink | `#08090a`, warmed slightly off pure black |
 | Easing | `power3.inOut` (CSS mirror: `cubic-bezier(.65,0,.35,1)`) |
 | Durations | `fast 0.25s` for UI, `slow 1.0s` for section transitions. Two speeds, not a spectrum |
@@ -743,11 +745,10 @@ Without those, Lenis interpolates on its own loop while ScrollTrigger samples
 Four beats: the problem → the mechanism → the gate → the way in. Only the first
 two are pinned and scrubbed, because that is where the argument is.
 
-The animation is **one set of eighteen dots throughout**. Scattered, they are
-eighteen individually-unremarkable transactions — exactly what a per-transaction
-model sees. On scroll, seven migrate into a ring around two shared attributes and
-the edges draw in. Nothing is added; the data was always that shape. That *is*
-the product thesis, so it seemed worth making the animation say it literally.
+The animation is **every one of the 1,499 real transactions** (§5m). 900 stay
+scattered; 599 migrate into the twelve real rings on scroll. Nothing is added —
+the data was always that shape. With eighteen hand-placed dots that was a claim;
+at real scale it is a demonstration.
 
 Responsive behaviour uses `gsap.matchMedia()`, not a width check at mount, so
 toggling device emulation in devtools tears the pinned timeline down and
@@ -763,7 +764,7 @@ No loader, no pinning, no scroll-driven anything. A reviewer opens this many
 times a day and wants the queue immediately. GSAP appears only for list
 entrances and panel swaps.
 
-- Dense sortable table: score bar, account count, cadence pill, status pill, evidence headline
+- Sortable queue: score bar with both thresholds ticked, account count, cadence/status tags, evidence headline
 - Detail pane: case file, per-signal score breakdown, entity graph, audit trail
 - Approve / Dismiss, both refusing to submit without a reason
 - Live scorecard
@@ -1423,6 +1424,100 @@ has been asked what they would pay.
 
 ---
 
+## 5m. UI pass — U0 through U5
+
+Six phases of interface work after the product was complete. §5d describes the
+original build; where the two disagree, this section is current.
+
+### The palette was the problem
+
+The console read as machine-generated, and the cause was specific:
+`lib/tokens.ts` defined **eleven hues** — red-300, blue-300, amber-300,
+violet-300, indigo-400, pink-400 and friends — while its own header claimed
+*"the single accent, there is deliberately no second one"*. That stock Tailwind
+set is the most recognisable fingerprint of a generated interface, and a table
+row carried three differently-coloured pills.
+
+Now **three functional colours**, each meaning exactly one thing: accent
+(`#3395ff`, Razorpay's brand blue), signal (`#e8a33d`, "a human must look at
+this"), danger (`#e5484d`, an operation failed). Everything else is a luminance
+ramp. Pills became `.rs-tag` — no fill, no radius, hairline rule, meaning in
+the label. A rule of three that is kept beats a rule of one that was broken
+with the claim left standing.
+
+### What each phase did
+
+| | Phase | Substance |
+|---|---|---|
+| **U0** | Layout | Fixed the pinned graph overflowing its own section (below) |
+| **U1** | Palette | Eleven hues → three; pills → tags; procedural film grain |
+| **U2** | Hero field | 18 SVG dots → 1,499 real transactions on canvas |
+| **U3** | Console UX | Type 12.8px → 16px; seven numbered review steps; orientation panel |
+| **U4** | Calibration | Threshold scrubber, computed from the twelve real scores |
+| **U5** | Ship | Canvas RAF gating, reduced-motion guards, generated icon + OG card |
+
+### ⚠️ Three bugs worth remembering
+
+**Height derived from width, inside a height-capped box.** The landing graph
+was `width:100%` on a 1000×560 viewBox inside a `100svh` pinned section with
+`overflow:hidden`. At 1920 that is 950px of graph in a 1080px box; at 2560 it
+is 1308 in 1440. It clipped, and pinning held the clip for the whole scrub.
+Fixed by capping *width* at `height × aspect` — capping height would letterbox.
+
+**GSAP does not see `prefers-reduced-motion`.** The CSS rule in `globals.css`
+only reaches CSS animations and transitions. GSAP writes inline styles, so five
+components animated regardless of the setting. Every animated component now
+carries a JS guard. `CorpusPanel` needed more than an early return: its total is
+*written by* the counter tween, so skipping it left the panel reading "0".
+
+**A RAF loop with no off-switch.** The transaction field animated for the entire
+session — through the rest of the page, and into a background tab on some
+browsers — for a canvas nobody could see. Now gated on an IntersectionObserver,
+holding its drift clock across pauses so it does not jump on return.
+
+### The honesty rules the UI had to follow
+
+The interface is where a project is most tempted to overstate, so:
+
+- **The hero's headline result carries its caveat in the hero.** "12/12, zero
+  false flags" sits directly above *"measured on a synthetic corpus this project
+  generated — separable by construction"*. That line is never trimmed for layout.
+- **The threshold scrubber will not go below 0.30.** The detector does not
+  persist clusters under `SCORE_THRESHOLD`, so there is no record of what a
+  lower threshold would flag. The measured sweep is printed instead, labelled as
+  measured and attributed to the tuning split.
+- **No fabricated baseline.** "Why this" frames the per-transaction comparison
+  as a *structural* gap, never a benchmark. No per-transaction baseline was ever
+  run here, so "catches 0% of rings" would be an invented measurement. The true
+  claim is stronger: a single payment contains no evidence of coordination, so
+  scoring it alone cannot find a ring however good the model is.
+- **Razorpay's mark is footer-only.** Not the nav, not the hero, not the
+  favicon, not the OG card — those are RingSentinel's own branding positions and
+  a third-party mark there reads as endorsement, which `ARCHITECTURE.md`
+  explicitly disclaims. The file is gitignored rather than vendored: their brand
+  assets are governed by a Usage Agreement they do not publish.
+
+### Frontend layout, as built
+
+```
+frontend/
+├── app/
+│   ├── icon.svg               <- generated mark; accounts around one attribute
+│   ├── opengraph-image.tsx    <- 1200x630 card, next/og, measured figures
+│   ├── page.tsx               <- hero + corpus panel · field · gate · why · scrubber
+│   └── console/page.tsx       <- queue, then one case below it
+├── components/landing/
+│   ├── TransactionField.tsx   <- 1,499-dot canvas, visibility-gated
+│   ├── CorpusPanel.tsx        <- hero donut: 12 real ring segments
+│   ├── WhyUs.tsx              <- the pitch, on measured numbers
+│   └── ThresholdScrubber.tsx  <- calibration, live from real scores
+└── components/console/
+    ├── Orientation.tsx        <- "how this works", one glance
+    └── ThesisDiagram.tsx      <- the same twelve, scored alone vs as a graph
+```
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -1507,6 +1602,7 @@ docker compose exec backend alembic upgrade head
 | **12** | Tamper-evident evidence pack: audit hash chain, schema-level verification (§5j) | **Done** |
 | **9** | Blind-spot measurement: 3 robustness cases, explanation-quality audit, `BLINDSPOTS.md` (§5k) | **Done** |
 | **11** | Monetization calculator + `MONETIZATION.md` (§5l) | **Done** |
+| **U0-U5** | UI pass: layout fix, palette, real-data hero canvas, console UX, threshold scrubber, ship polish (§5m) | **Done** |
 
 **Phase 1 constraints that were deliberately honoured:** no fake/mock data, no
 UI beyond a placeholder page, no detection logic. Do not "helpfully" add these
