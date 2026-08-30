@@ -81,6 +81,11 @@ POPULATION_RELATIVE_REUSE = False
 #: How candidates are selected. "absolute" is the DEFAULT and every published
 #: result was measured with it; see detection/thresholds.py for why percentile
 #: does not generalise and capacity does.
+#: Fifth signal, weight 0 by default. Every published result was measured
+#: without it; turning it on changes every score, so it is measured before it
+#: is adopted. See detection/linkage.py.
+WEIGHT_LINKAGE = 0.0
+
 THRESHOLD_MODE = "absolute"
 SCORE_PERCENTILE = 0.10
 REVIEW_BUDGET = 25
@@ -252,6 +257,7 @@ class DetectorConfig:
     weight_timing_regularity: float = WEIGHT_TIMING_REGULARITY
     weight_concentration: float = WEIGHT_CONCENTRATION
     weight_account_shallowness: float = WEIGHT_ACCOUNT_SHALLOWNESS
+    weight_linkage: float = WEIGHT_LINKAGE
     shallow_account_max_transactions: int = SHALLOW_ACCOUNT_MAX_TRANSACTIONS
 
     score_threshold: float = SCORE_THRESHOLD

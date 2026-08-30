@@ -51,6 +51,7 @@ from detection.cadence import CadenceCall, classify_cadence
 from detection.clustering import CandidateCluster
 from detection.config import DetectorConfig
 from detection.graph import ATTRIBUTE_TYPES, GraphBundle
+from detection.linkage import linkage_signal
 
 
 @dataclass
@@ -102,6 +103,8 @@ class ScoredCluster:
     cadence: CadenceCall
     timing: ClusterTiming
     baseline: TimingBaseline
+    #: Cluster-level joining, counting attributes below the evidence floor.
+    linkage: float = 0.0
     signal_notes: list[str] = field(default_factory=list)
 
     @property
@@ -363,12 +366,16 @@ def score_cluster(
     cadence = classify_cadence(timing, config)
 
     shallowness, shallow_count = shallowness_signal(cluster, bundle, config)
+    # Sees the attributes the evidence floor discards; catches rings that keep
+    # every attribute at two accounts. Weight 0 unless explicitly enabled.
+    linkage = linkage_signal(cluster, bundle) if config.weight_linkage else 0.0
 
     score = (
         config.weight_attribute_reuse * reuse
         + config.weight_timing_regularity * timing_signal
         + config.weight_concentration * concentration
         + config.weight_account_shallowness * shallowness
+        + config.weight_linkage * linkage
     )
     score = max(0.0, min(1.0, score))
 
@@ -406,6 +413,7 @@ def score_cluster(
         timing_regularity=timing_signal,
         concentration=concentration,
         account_shallowness=shallowness,
+        linkage=linkage,
         shallow_account_count=shallow_count,
         shared_attributes=shared,
         cadence=cadence,
