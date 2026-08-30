@@ -38,3 +38,8 @@ pgdata/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Third-party datasets: large, licensed on download, never redistributed here.
+# See backend/data/README.md.
+backend/data/**
+!backend/data/README.md
