@@ -15,7 +15,7 @@ import { api, type ClusterDetail as Detail } from "@/lib/api";
 import { DURATION, EASE_OUT } from "@/lib/tokens";
 import AuditTrail from "./AuditTrail";
 import GraphView from "./GraphView";
-import { ActionPill, CadencePill, ScoreBar, SectionTitle, StatusPill } from "./Bits";
+import { ActionTag, CadenceTag, ScoreBar, SectionTitle, StatusTag } from "./Bits";
 
 type Pending = "approve" | "dismiss" | null;
 
@@ -98,9 +98,9 @@ export default function ClusterDetail({
       {/* ---- header ---------------------------------------------------- */}
       <div className="rs-detail-block rs-anim">
         <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-          <StatusPill status={cluster.status} />
-          <CadencePill cadence={cluster.cadence} />
-          {case_file && <ActionPill action={case_file.suggested_action} />}
+          <StatusTag status={cluster.status} />
+          <CadenceTag cadence={cluster.cadence} />
+          {case_file && <ActionTag action={case_file.suggested_action} />}
           <span className="rs-mono" style={{ color: "var(--text-faint)", marginLeft: "auto" }}>
             {cluster.id.slice(0, 8)} · detector {cluster.detector_version}
           </span>
@@ -280,7 +280,7 @@ export default function ClusterDetail({
         <div style={panel}>
           {decided ? (
             <p style={{ margin: 0, color: "var(--text-muted)" }}>
-              Already reviewed — recorded as <StatusPill status={cluster.status} />. A
+              Already reviewed — recorded as <StatusTag status={cluster.status} />. A
               decision is made once; the audit log is not rewritten.
             </p>
           ) : (
@@ -360,7 +360,7 @@ export default function ClusterDetail({
           )}
 
           {error && (
-            <p style={{ color: "#fca5a5", fontSize: "var(--step--1)", marginBottom: 0 }}>
+            <p style={{ color: "var(--danger)", fontSize: "var(--step--1)", marginBottom: 0 }}>
               {error}
             </p>
           )}
@@ -417,7 +417,7 @@ const buttonPrimary: React.CSSProperties = {
 
 const buttonWarn: React.CSSProperties = {
   ...buttonBase,
-  background: "#fcd34d",
+  background: "var(--signal)",
   color: "var(--ink)",
 };
 

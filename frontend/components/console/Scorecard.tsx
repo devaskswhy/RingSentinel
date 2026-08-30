@@ -152,7 +152,7 @@ export default function Scorecard({ data }: { data: ScorecardData | null }) {
                 style={{
                   fontFamily: "var(--font-display)",
                   fontSize: "var(--step-2)",
-                  color: held.needs_review.count > 0 ? "#fcd34d" : "var(--text)",
+                  color: held.needs_review.count > 0 ? "var(--signal)" : "var(--text)",
                 }}
               >
                 {held.needs_review.count}

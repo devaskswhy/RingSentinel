@@ -14,10 +14,18 @@ import { gsap } from "gsap";
 import type { AuditEntry } from "@/lib/api";
 import { DURATION, EASE_OUT, STAGGER } from "@/lib/tokens";
 
+/**
+ * Actors on the luminance ramp, not on three hues.
+ *
+ * The human gets the accent because who decided is the fact this trail exists
+ * to record — the detector flagging and Claude explaining are both automatic
+ * and unremarkable by comparison. Ranking the actors by prominence says
+ * something true; giving them each a colour said nothing.
+ */
 const ACTOR_COLOR: Record<AuditEntry["actor"], string> = {
-  system: "#93c5fd",
-  claude: "#c4b5fd",
-  human: "#2dd4bf",
+  system: "var(--text-faint)",
+  claude: "var(--text-muted)",
+  human: "var(--accent)",
 };
 
 const ACTION_LABEL: Record<string, string> = {
@@ -95,11 +103,8 @@ export default function AuditTrail({ entries }: { entries: AuditEntry[] }) {
           />
           <div style={{ display: "flex", gap: "0.6rem", alignItems: "baseline", flexWrap: "wrap" }}>
             <span
-              className="rs-pill"
-              style={{
-                color: ACTOR_COLOR[entry.actor],
-                background: "rgba(255,255,255,0.04)",
-              }}
+              className="rs-tag"
+              style={{ color: ACTOR_COLOR[entry.actor] }}
             >
               {entry.actor}
             </span>

@@ -12,6 +12,15 @@
   --accent-dim: #14b8a6;
   --accent-glow: rgba(45, 212, 191, 0.14);
 
+  /* Three functional colours, each with exactly one meaning. This is the whole
+     palette — everything else is the neutral ramp below.
+       accent  a confirmed finding, and interactive affordances
+       signal  a human needs to look at this (the ambiguous band)
+       danger  an operation failed
+     Compare eleven decorative hues, which is what this replaced. */
+  --signal: #e8a33d;
+  --danger: #e5484d;
+
   /* Near-black, warmed very slightly so it does not read as pure #000. */
   --ink: #08090a;
   --ink-raised: #0e1012;
@@ -174,18 +183,87 @@ h1, h2, h3, h4 {
   color: var(--text-faint);
 }
 
-.rs-pill {
+/* ---------------------------------------------------------------------------
+   Instrument tags — what replaced the pills.
+
+   The old .rs-pill was a 999px-radius capsule with a 12%-opacity tinted
+   background, and a table row carried three of them in three different hues.
+   That combination is the visual signature of a generated dashboard. This is
+   the opposite: no fill, no radius, a hairline rule on the left edge, and the
+   meaning carried by the label and its luminance. It reads as a readout on an
+   instrument rather than a badge on a card.
+   --------------------------------------------------------------------------- */
+.rs-tag {
   display: inline-flex;
   align-items: center;
-  gap: 0.35em;
-  padding: 0.15em 0.6em;
-  border-radius: 999px;
+  gap: 0.4em;
+  padding: 0.1em 0 0.1em 0.5em;
+  border-left: 1px solid currentColor;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.02em;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   white-space: nowrap;
-  border: 1px solid transparent;
+  line-height: 1.4;
 }
+
+/* Only the signal tone gets a fill, and only because it is the one state that
+   should catch an eye scanning a long queue. */
+.rs-tag[data-tone="signal"] {
+  background: rgba(232, 163, 61, 0.09);
+  padding-right: 0.5em;
+}
+
+/* ---------------------------------------------------------------------------
+   Film grain.
+
+   A flat dark field is what makes a dark UI read as a template. Real
+   instruments have texture — phosphor, backlight bleed, sensor noise. This is
+   procedural (an SVG turbulence filter, no image asset), fixed to the viewport
+   so it does not scroll with content, and pinned under the pointer so it never
+   intercepts a click.
+   --------------------------------------------------------------------------- */
+.rs-grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rs-grain::after { opacity: 0.02; }
+}
+
+/* Hairline rules. A table of real data wants rules, not gaps between cards. */
+.rs-rule-b { border-bottom: 1px solid var(--line); }
+.rs-rule-t { border-top: 1px solid var(--line); }
+
+/* ---------------------------------------------------------------------------
+   Queue rows.
+
+   Selection is marked with a rule down the left edge rather than a background
+   wash. A reviewer scanning the queue needs to see which row is open without
+   losing the ability to read the row underneath the highlight, and an inset
+   box-shadow costs no layout. Hover and selection are separate states on
+   purpose — hover says "clickable", selection says "this is what the panel is
+   showing".
+   --------------------------------------------------------------------------- */
+.rs-row {
+  cursor: pointer;
+  border-bottom: 1px solid var(--line);
+  transition: background var(--dur-fast) var(--ease);
+}
+.rs-row:hover { background: var(--ink-raised); }
+.rs-row[data-selected="true"] {
+  background: var(--ink-panel);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
+/* The id column only earns its width when it identifies the open row. */
+.rs-row[data-selected="true"] .rs-row-id { color: var(--accent); }
 
 /* Only transform and opacity animate anywhere in this app — never geometry.
    Layout-affecting properties cause reflow, which the console cannot afford

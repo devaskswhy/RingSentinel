@@ -38,7 +38,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${spaceGrotesk.variable} ${inter.variable}`}>
-      <body>{children}</body>
+      {/* rs-grain lays a procedural noise field over the whole viewport. A
+          perfectly flat dark background is what makes a dark interface read as
+          a template; every real instrument has some texture to it. */}
+      <body className="rs-grain">{children}</body>
     </html>
   );
 }

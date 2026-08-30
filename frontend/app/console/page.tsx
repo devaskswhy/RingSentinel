@@ -26,7 +26,7 @@ import {
 import { DURATION, EASE_OUT, STAGGER } from "@/lib/tokens";
 import ClusterDetail from "@/components/console/ClusterDetail";
 import Scorecard from "@/components/console/Scorecard";
-import { CadencePill, ScoreBar, StatusPill } from "@/components/console/Bits";
+import { CadenceTag, ScoreBar, StatusTag } from "@/components/console/Bits";
 
 type SortKey = "score" | "size" | "status" | "cadence";
 
@@ -218,11 +218,12 @@ export default function Console() {
           {newCount > 0 && (
             <button
               onClick={() => setNewCount(0)}
-              className="rs-pill rs-focus"
+              className="rs-tag rs-focus"
               style={{
                 color: "var(--ink)",
                 background: "var(--accent)",
                 border: "none",
+                padding: "0.3em 0.6em",
                 cursor: "pointer",
               }}
               title="Clusters that appeared since you started watching"
@@ -270,7 +271,7 @@ export default function Console() {
           style={{
             padding: "0.7rem 1.5rem",
             background: "rgba(239,68,68,0.1)",
-            color: "#fca5a5",
+            color: "var(--danger)",
             fontSize: "var(--step--1)",
             borderBottom: "1px solid rgba(239,68,68,0.25)",
           }}
@@ -330,6 +331,7 @@ export default function Console() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--step--1)" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--line-strong)" }}>
+                  <th style={{ ...thStyle, cursor: "default" }}>id</th>
                   <Th onClick={() => toggleSort("score")} active={sort === "score"} asc={asc}>
                     score
                   </Th>
@@ -350,23 +352,30 @@ export default function Console() {
                   <tr
                     key={c.id}
                     className="rs-row rs-anim"
+                    data-selected={selected === c.id}
                     onClick={() => setSelected(c.id)}
-                    style={{
-                      borderBottom: "1px solid var(--line)",
-                      cursor: "pointer",
-                      background: selected === c.id ? "var(--ink-hover)" : "transparent",
-                      transition: "background var(--dur-fast) var(--ease)",
-                    }}
                   >
+                    <td
+                      className="rs-row-id rs-mono"
+                      style={{
+                        ...tdStyle,
+                        paddingLeft: "0.7rem",
+                        color: "var(--text-faint)",
+                        letterSpacing: "0.02em",
+                      }}
+                      title={c.id}
+                    >
+                      {c.id.slice(0, 8)}
+                    </td>
                     <td style={tdStyle}>
                       <ScoreBar score={c.score} />
                     </td>
                     <td style={{ ...tdStyle, fontVariantNumeric: "tabular-nums" }}>{c.size}</td>
                     <td style={tdStyle}>
-                      <CadencePill cadence={c.cadence} />
+                      <CadenceTag cadence={c.cadence} />
                     </td>
                     <td style={tdStyle}>
-                      <StatusPill status={c.status} />
+                      <StatusTag status={c.status} />
                     </td>
                     <td
                       style={{

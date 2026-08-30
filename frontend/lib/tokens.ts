@@ -9,9 +9,21 @@
  * here, it does not get used.
  */
 
-/** The single accent. There is deliberately no second one. */
+/**
+ * Three functional colours, each with exactly one meaning, plus a neutral ramp.
+ *
+ *   accent  a confirmed finding, and interactive affordances
+ *   signal  a human needs to look at this (the ambiguous band)
+ *   danger  an operation failed
+ *
+ * This file used to claim "the single accent, there is deliberately no second
+ * one" while defining eleven hues fifty lines further down. Three colours that
+ * each mean one thing is a rule that can actually be kept; one colour was a
+ * rule that got quietly broken and left the claim standing.
+ */
 export const ACCENT = "#2dd4bf";
 export const ACCENT_DIM = "#14b8a6";
+export const DANGER = "#e5484d";
 export const INK = "#08090a";
 
 /**
@@ -26,7 +38,7 @@ export const EASE_OUT = "power3.out";
 
 /**
  * Two speeds, not a spectrum.
- *   fast — anything small and frequent: buttons, rows, pills.
+ *   fast — anything small and frequent: buttons, rows, tags.
  *   slow — full-section transitions on the landing page.
  * Anything in between is a decision nobody needs to make.
  */
@@ -38,26 +50,79 @@ export const DURATION = {
 /** Stagger for list entrances. Small enough to read as one motion. */
 export const STAGGER = 0.04;
 
-/** Cadence classes get a colour each. Teal stays reserved for the accent. */
-export const CADENCE_COLORS = {
-  agent_like: { fg: "#fca5a5", bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)" },
-  human_like: { fg: "#93c5fd", bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.3)" },
-  inconclusive: { fg: "#a1a1aa", bg: "rgba(161,161,170,0.1)", border: "rgba(161,161,170,0.25)" },
+/**
+ * Reserved strictly for "a human needs to look at this" — the ambiguous band,
+ * and nothing else. The moment it appears somewhere routine it stops meaning
+ * anything.
+ */
+export const SIGNAL = "#e8a33d";
+
+/**
+ * ---------------------------------------------------------------------------
+ * Tags replace the old coloured pills.
+ *
+ * This used to be eleven distinct hues — red-300, blue-300, amber-300,
+ * violet-300, indigo-400, pink-400 and friends. That is the stock Tailwind
+ * palette, it is the single most recognisable fingerprint of a generated
+ * interface, and it flatly contradicted the rule this file states two lines
+ * from the top. It also meant three differently-coloured pills in one table
+ * row, which is decoration rather than information.
+ *
+ * A real instrument differentiates by POSITION, LABEL and LUMINANCE, because
+ * those survive a colourblind reviewer and a projector with bad gamma. Hue is
+ * spent on exactly one thing: whether something needs attention.
+ * ---------------------------------------------------------------------------
+ */
+export type Tone = "bright" | "neutral" | "faint" | "accent" | "signal";
+
+export const TONE_COLOR: Record<Tone, string> = {
+  bright: "var(--text)",
+  neutral: "var(--text-muted)",
+  faint: "var(--text-faint)",
+  accent: "var(--accent)",
+  signal: "var(--signal)",
+};
+
+/** Cadence. "AGENT" earns the accent because it is the discriminating finding. */
+export const CADENCE_TAG = {
+  agent_like: { label: "AGENT", tone: "accent" as Tone },
+  human_like: { label: "HUMAN", tone: "neutral" as Tone },
+  inconclusive: { label: "UNCLEAR", tone: "faint" as Tone },
 } as const;
 
-export const STATUS_COLORS = {
-  pending: { fg: "#fcd34d", bg: "rgba(245,158,11,0.12)" },
-  cleared: { fg: "#2dd4bf", bg: "rgba(45,212,191,0.12)" },
-  dismissed: { fg: "#a1a1aa", bg: "rgba(161,161,170,0.1)" },
-  needs_review: { fg: "#c4b5fd", bg: "rgba(139,92,246,0.12)" },
+/**
+ * Status. `needs_review` reads as AMBIGUOUS because that is what it means —
+ * the detector flagged it and said it was unsure (CLAUDE.md 5e). It is the one
+ * state that carries the signal hue.
+ */
+export const STATUS_TAG = {
+  pending: { label: "PENDING", tone: "bright" as Tone },
+  needs_review: { label: "AMBIGUOUS", tone: "signal" as Tone },
+  cleared: { label: "APPROVED", tone: "accent" as Tone },
+  dismissed: { label: "DISMISSED", tone: "faint" as Tone },
 } as const;
 
-/** Graph node colours, one per entity type. */
+/** Claude's recommendation. Advisory, so it never outweighs the score. */
+export const ACTION_TAG = {
+  likely_ring: { label: "RING", tone: "bright" as Tone },
+  review_closer: { label: "CLOSER", tone: "signal" as Tone },
+  likely_false_positive: { label: "FALSE POS", tone: "faint" as Tone },
+} as const;
+
+/**
+ * Graph nodes: accounts in the accent, attributes on a luminance ramp.
+ *
+ * Four hues became one hue plus three greys. The entity types are already
+ * distinguished by SHAPE in both graphs — circles for accounts, diamonds for
+ * shared attributes — so hue was carrying no information the shape did not
+ * already carry, and four saturated colours on a dark field read as a
+ * children's toy rather than an instrument.
+ */
 export const NODE_COLORS = {
   customer: "#2dd4bf",
-  device: "#818cf8",
-  address: "#fbbf24",
-  instrument: "#f472b6",
+  instrument: "#e8eaed",
+  device: "#9aa1a8",
+  address: "#656c73",
 } as const;
 
 /**
