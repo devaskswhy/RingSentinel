@@ -11,7 +11,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
-import { api, type ClusterDetail as Detail } from "@/lib/api";
+import { api, type ClusterDetail as Detail, type EvidencePack } from "@/lib/api";
 import { DURATION, EASE_OUT } from "@/lib/tokens";
 import AuditTrail from "./AuditTrail";
 import GraphView from "./GraphView";
@@ -36,7 +36,13 @@ export default function ClusterDetail({
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
-  const { cluster, case_file, evidence, graph, audit_trail } = detail;
+  // The pack re-verifies the whole audit chain, so it is fetched only when a
+  // reviewer asks for it rather than on every cluster open.
+  const [pack, setPack] = useState<EvidencePack | null>(null);
+  const [packBusy, setPackBusy] = useState(false);
+  const [packError, setPackError] = useState<string | null>(null);
+
+  const { cluster, case_file, evidence, graph, audit_trail, counterfactual } = detail;
   const decided = cluster.status !== "pending";
 
   useEffect(() => {
@@ -59,6 +65,10 @@ export default function ClusterDetail({
     setIntent(null);
     setReason("");
     setError(null);
+    // The pack is per-cluster too. Showing a previous cluster's verification
+    // under a new cluster's heading would be a lie about which rows were checked.
+    setPack(null);
+    setPackError(null);
   }, [cluster.id]);
 
   async function submit() {
@@ -258,6 +268,79 @@ export default function ClusterDetail({
         </div>
       </div>
 
+      {/* ---- counterfactual -------------------------------------------
+          The question a reviewer actually asks after reading a score: how
+          close was this? Answerable only because the score is a sum of named
+          signals rather than a model output. */}
+      {counterfactual && (
+        <div className="rs-detail-block rs-anim">
+          <SectionTitle
+            right={
+              <span className="rs-mono" style={{ color: "var(--text-faint)" }}>
+                {counterfactual.gap >= 0 ? "+" : ""}
+                {counterfactual.gap.toFixed(3)} from {counterfactual.boundary_name}
+              </span>
+            }
+          >
+            How close was this?
+          </SectionTitle>
+          <div style={panel}>
+            <p style={{ margin: 0, fontSize: "var(--step-0)", lineHeight: 1.55 }}>
+              {counterfactual.reading}
+            </p>
+
+            {counterfactual.smallest_change && (
+              <div
+                className="rs-mono"
+                style={{
+                  marginTop: "0.85rem",
+                  paddingTop: "0.85rem",
+                  borderTop: "1px solid var(--line)",
+                  color: "var(--text-muted)",
+                  display: "grid",
+                  gap: "0.3rem",
+                }}
+              >
+                <div>
+                  change tested ·{" "}
+                  <span style={{ color: "var(--text)" }}>
+                    {counterfactual.smallest_change.change}
+                  </span>
+                </div>
+                <div style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {counterfactual.current_score.toFixed(3)} →{" "}
+                  <span
+                    style={{
+                      color: counterfactual.smallest_change.would_cross
+                        ? "var(--signal)"
+                        : "var(--text)",
+                    }}
+                  >
+                    {counterfactual.smallest_change.score_would_become.toFixed(3)}
+                  </span>{" "}
+                  ({counterfactual.smallest_change.delta >= 0 ? "+" : ""}
+                  {counterfactual.smallest_change.delta.toFixed(4)}) ·{" "}
+                  {counterfactual.smallest_change.would_cross
+                    ? "crosses the boundary"
+                    : "does not cross"}
+                </div>
+              </div>
+            )}
+
+            <p
+              style={{
+                marginTop: "0.85rem",
+                marginBottom: 0,
+                color: "var(--text-faint)",
+                fontSize: "var(--step--1)",
+              }}
+            >
+              {counterfactual.note}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ---- graph ----------------------------------------------------- */}
       <div className="rs-detail-block rs-anim">
         <SectionTitle
@@ -372,6 +455,162 @@ export default function ClusterDetail({
         <SectionTitle>Audit trail · append-only</SectionTitle>
         <AuditTrail entries={audit_trail} />
       </div>
+
+      {/* ---- evidence pack ---------------------------------------------
+          The append-only trigger BLOCKS tampering; the hash chain makes it
+          DETECTABLE, which is the stronger claim — someone with raw database
+          access can drop a trigger, but they cannot make the arithmetic add up
+          afterwards. This button is the only place that is visible from the
+          product rather than from curl. */}
+      <div className="rs-detail-block rs-anim">
+        <SectionTitle
+          right={
+            pack && (
+              <span
+                className="rs-tag"
+                data-tone={pack.integrity.chain_intact ? "accent" : "signal"}
+                style={{
+                  color: pack.integrity.chain_intact ? "var(--accent)" : "var(--danger)",
+                }}
+              >
+                {pack.integrity.chain_intact ? "CHAIN INTACT" : "CHAIN BROKEN"}
+              </span>
+            )
+          }
+        >
+          Evidence pack
+        </SectionTitle>
+
+        <div style={panel}>
+          {!pack && (
+            <>
+              <p
+                style={{
+                  margin: "0 0 0.9rem",
+                  color: "var(--text-muted)",
+                  fontSize: "var(--step--1)",
+                }}
+              >
+                One self-contained bundle: the evidence, Claude&apos;s explanation
+                and what it cost, the human decision and its written reason, and a
+                re-verification of the hash chain the audit rows sit in.
+              </p>
+              <button
+                onClick={async () => {
+                  setPackBusy(true);
+                  setPackError(null);
+                  try {
+                    setPack(await api.evidencePack(cluster.id));
+                  } catch (e) {
+                    setPackError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setPackBusy(false);
+                  }
+                }}
+                disabled={packBusy}
+                className="rs-focus"
+                style={{ ...buttonGhost, cursor: packBusy ? "wait" : "pointer" }}
+              >
+                {packBusy ? "verifying chain…" : "Build and verify →"}
+              </button>
+              {packError && (
+                <p
+                  style={{
+                    color: "var(--danger)",
+                    fontSize: "var(--step--1)",
+                    marginBottom: 0,
+                  }}
+                >
+                  {packError}
+                </p>
+              )}
+            </>
+          )}
+
+          {pack && (
+            <div style={{ display: "grid", gap: "0.85rem" }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "var(--step-0)",
+                  color: pack.integrity.chain_intact ? "var(--text)" : "var(--danger)",
+                }}
+              >
+                {pack.integrity.summary}
+              </p>
+
+              <div
+                className="rs-mono"
+                style={{
+                  display: "grid",
+                  gap: "0.3rem",
+                  paddingTop: "0.85rem",
+                  borderTop: "1px solid var(--line)",
+                  color: "var(--text-muted)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                <Row k="rows verified" v={pack.integrity.rows_verified.toLocaleString()} />
+                {pack.explanation && (
+                  <>
+                    <Row k="explained by" v={pack.explanation.model} />
+                    <Row k="cost" v={`$${pack.explanation.cost_usd.toFixed(4)}`} />
+                  </>
+                )}
+                <Row k="decision" v={pack.decision.action ?? "not yet decided"} />
+                <Row
+                  k="digest"
+                  v={`${pack.bundle_digest.algorithm}:${pack.bundle_digest.value.slice(0, 16)}…`}
+                />
+              </div>
+
+              {/* Precision matters here: a checksum is not a signature. */}
+              <p
+                style={{
+                  margin: 0,
+                  color: "var(--text-faint)",
+                  fontSize: "var(--step--1)",
+                }}
+              >
+                {pack.bundle_digest.note}
+              </p>
+
+              <details>
+                <summary
+                  className="rs-label rs-focus"
+                  style={{ cursor: "pointer", listStyle: "none" }}
+                >
+                  What this guarantees ({pack.guarantees.length}) ▾
+                </summary>
+                <ul
+                  style={{
+                    margin: "0.7rem 0 0",
+                    paddingLeft: "1.1rem",
+                    color: "var(--text-muted)",
+                    fontSize: "var(--step--1)",
+                    display: "grid",
+                    gap: "0.45rem",
+                  }}
+                >
+                  {pack.guarantees.map((g) => (
+                    <li key={g}>{g}</li>
+                  ))}
+                </ul>
+              </details>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** One key/value line in a mono readout. */
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+      <span style={{ color: "var(--text-faint)" }}>{k}</span>
+      <span style={{ color: "var(--text)", textAlign: "right" }}>{v}</span>
     </div>
   );
 }

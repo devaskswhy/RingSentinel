@@ -106,6 +106,29 @@ export interface AuditEntry {
   at: string;
 }
 
+/**
+ * "How close was this?" — a sensitivity read on the score that already exists,
+ * not a second model. Only answerable because the score is a sum of named
+ * signals, which is the argument for not using an LLM to produce it.
+ */
+export interface Counterfactual {
+  current_score: number;
+  nearest_boundary: number;
+  boundary_name: string;
+  gap: number;
+  reading: string;
+  note: string;
+  smallest_change: {
+    change: string;
+    attribute_type: string;
+    external_ref: string;
+    accounts_now: number;
+    score_would_become: number;
+    delta: number;
+    would_cross: boolean;
+  } | null;
+}
+
 export interface ClusterDetail {
   cluster: {
     id: string;
@@ -119,6 +142,39 @@ export interface ClusterDetail {
   evidence: Evidence;
   graph: { nodes: GraphNode[]; edges: GraphEdge[] };
   audit_trail: AuditEntry[];
+  counterfactual: Counterfactual | null;
+}
+
+/**
+ * The self-contained bundle for a cluster: evidence, Claude's explanation, the
+ * human's decision, the audit rows, and a verification of the hash chain those
+ * rows sit in.
+ *
+ * `integrity.chain_intact` is the real guarantee. `bundle_digest` is a
+ * CHECKSUM, not a signature — it detects corruption in transit and proves
+ * nothing about origin, because there is no key. The UI must not call it
+ * signed.
+ */
+export interface EvidencePack {
+  generated_at: string;
+  cluster: {
+    id: string;
+    status: string;
+    score: number;
+    cadence: string;
+    detector_version: string;
+    flagged_at: string;
+  };
+  explanation: { model: string; cost_usd: number; authority: string } | null;
+  decision: { action: string | null; note: string };
+  integrity: {
+    chain_intact: boolean;
+    rows_verified: number;
+    summary: string;
+    how_it_works: string;
+  };
+  guarantees: string[];
+  bundle_digest: { algorithm: string; value: string; covers: string; note: string };
 }
 
 export interface Scorecard {
@@ -257,6 +313,9 @@ export const api = {
     ),
 
   getCluster: (id: string) => get<ClusterDetail>(`/clusters/${id}`),
+
+  /** Fetched on demand, not with the detail — it verifies the whole chain. */
+  evidencePack: (id: string) => get<EvidencePack>(`/clusters/${id}/evidence-pack`),
 
   scorecard: () => get<Scorecard>("/eval/scorecard"),
 
