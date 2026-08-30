@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Loader from "@/components/landing/Loader";
+import CorpusPanel from "@/components/landing/CorpusPanel";
 import WhyUs from "@/components/landing/WhyUs";
 import TransactionField, {
   FALLBACK_CORPUS,
@@ -193,14 +194,15 @@ export default function Landing() {
             position: "relative",
           }}
         >
-          <div className="rs-shell">
+          <div className="rs-shell rs-hero-grid">
+          <div>
           <div className="rs-label" style={{ marginBottom: "1.75rem" }}>
             Razorpay buildathon · AI Risk Manager
           </div>
 
           <h1
             style={{
-              fontSize: "clamp(2.6rem, 8.5vw, var(--step-7))",
+              fontSize: "clamp(2.4rem, 6.4vw, var(--step-6))",
               maxWidth: "16ch",
             }}
           >
@@ -249,7 +251,9 @@ export default function Landing() {
               See how it works
             </a>
           </div>
+          </div>
 
+          <CorpusPanel corpus={corpus} />
           </div>
         </section>
 
