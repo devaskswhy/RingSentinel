@@ -1,0 +1,5 @@
+# Razorpay's logo is their trademark and their brand assets are governed by a
+# Usage Agreement they do not publish. The footer renders it if present and
+# falls back to a plain wordmark if not, so it stays local rather than being
+# vendored into this repository. See public/README.md.
+razorpay-logo.svg

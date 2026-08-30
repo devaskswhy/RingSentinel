@@ -438,11 +438,13 @@ export default function Landing() {
             style={{
               display: "flex",
               justifyContent: "space-between",
+              alignItems: "center",
               flexWrap: "wrap",
-              gap: "1rem",
+              gap: "1.25rem",
             }}
           >
             <span className="rs-label">RingSentinel</span>
+            <BuildathonCredit />
             <span className="rs-label">Razorpay test mode · nothing auto-blocks</span>
           </div>
         </footer>
@@ -491,6 +493,44 @@ function Caption({
         {body}
       </p>
     </div>
+  );
+}
+
+/**
+ * Attribution, in the footer, and deliberately nowhere else.
+ *
+ * A logo in the nav or the hero sits in RingSentinel's own branding position
+ * and reads as "Razorpay built this" or "Razorpay endorses this". Neither is
+ * true, ARCHITECTURE.md says so explicitly, and Razorpay's brand assets are
+ * governed by a Usage Agreement they do not publish. In the footer, next to the
+ * test-mode notice, it is plainly a credit — which is what it is.
+ *
+ * The mark is optional at runtime. If `public/razorpay-logo.svg` is absent the
+ * image removes itself and the wordmark alone carries the line, so the footer
+ * is never broken by a missing asset.
+ */
+function BuildathonCredit() {
+  return (
+    <span
+      className="rs-label"
+      style={{ display: "inline-flex", alignItems: "center", gap: "0.55rem" }}
+    >
+      Built for the
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/razorpay-logo.svg"
+        alt="Razorpay"
+        height={14}
+        style={{ height: 14, width: "auto", opacity: 0.75, display: "block" }}
+        onError={(e) => {
+          e.currentTarget.style.display = "none";
+          const next = e.currentTarget.nextElementSibling as HTMLElement | null;
+          if (next) next.style.display = "inline";
+        }}
+      />
+      <span style={{ display: "none" }}>Razorpay</span>
+      AI Buildathon
+    </span>
   );
 }
 
