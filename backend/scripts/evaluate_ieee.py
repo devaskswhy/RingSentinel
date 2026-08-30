@@ -22,6 +22,7 @@ from sqlalchemy import text
 from app.db import SessionLocal
 from detection.config import DetectorConfig
 from detection.pipeline import run_detection
+from detection.thresholds import describe_selection
 from evaluation.ieee import (
     TRANSACTIONS_CSV,
     insert_corpus,
@@ -50,6 +51,11 @@ def main() -> int:
         help="Treat IEEE addr1 as a delivery address. It is a coarse billing "
              "region, so this connects everyone in an area — see evaluation/ieee.py.",
     )
+    parser.add_argument(
+        "--budget", type=int, default=0,
+        help="Select the top N candidates by score instead of thresholding at "
+             "0.30. Capacity generalises where an absolute cut does not.",
+    )
     args = parser.parse_args()
 
     if not TRANSACTIONS_CSV.exists():
@@ -57,11 +63,16 @@ def main() -> int:
         print("See backend/data/README.md for what to download.")
         return 2
 
-    config = DetectorConfig(population_relative_reuse=args.population_relative)
+    config = DetectorConfig(
+        population_relative_reuse=args.population_relative,
+        threshold_mode="budget" if args.budget else "absolute",
+        review_budget=args.budget or 25,
+    )
     print(
         "Address mapping: "
         + ("addr1 AS ADDRESS (coarse region!)" if args.map_address else "off (addr1 is a region, not an address)")
     )
+    print("Selection: " + describe_selection(config))
     print(
         "Reuse scoring: "
         + ("POPULATION-RELATIVE" if args.population_relative else "absolute (default)")
@@ -172,10 +183,15 @@ def main() -> int:
         print()
         if top_lift >= 1.3:
             print("  The score RANKS real fraud risk on data this project did not")
-            print("  generate. What does not transfer is the absolute threshold:")
-            print(f"  0.30 was calibrated where scores separate cleanly, and here it")
-            print(f"  admits {len(run.flagged)} of {len(run.scored)} candidates. On real data the cut")
-            print("  has to be a percentile of the observed distribution, not a constant.")
+            print("  generate.")
+            if config.threshold_mode == "absolute":
+                print(f"  What does not transfer is the absolute cut: 0.30 was calibrated")
+                print(f"  where scores separate cleanly, and here it admits")
+                print(f"  {len(run.flagged)} of {len(run.scored)} candidates. Re-run with --budget N.")
+            else:
+                print(f"  A capacity budget recovers it: {len(run.flagged)} clusters selected,")
+                print(f"  {result.lift:.2f}x lift, against 1.02x for the absolute cut on the")
+                print("  same data. Capacity is knowable when the distribution is not.")
         elif top_lift >= 1.1:
             print("  Weak but non-zero ranking signal. Below what would justify")
             print("  deploying this against real traffic without more work.")

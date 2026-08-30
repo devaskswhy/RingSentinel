@@ -42,6 +42,7 @@ from detection.clustering import find_clusters
 from detection.config import DetectorConfig
 from detection.graph import GraphBundle, load_graph
 from detection.population import build_population
+from detection.thresholds import select_flagged
 from detection.scoring import ScoredCluster, score_cluster
 
 log = logging.getLogger(__name__)
@@ -107,7 +108,7 @@ def run_detection(
         score_cluster(c, bundle, baseline, config, population) for c in candidates
     ]
     scored.sort(key=lambda s: s.score, reverse=True)
-    flagged = [s for s in scored if s.score >= config.score_threshold]
+    flagged = select_flagged(scored, config)
 
     run = DetectionRun(
         scored=scored,

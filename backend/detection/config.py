@@ -78,6 +78,16 @@ ATTRIBUTE_WEIGHTS: dict[str, float] = {
 #: measured before it is adopted rather than after.
 POPULATION_RELATIVE_REUSE = False
 
+#: How candidates are selected. "absolute" is the DEFAULT and every published
+#: result was measured with it; see detection/thresholds.py for why percentile
+#: does not generalise and capacity does.
+THRESHOLD_MODE = "absolute"
+SCORE_PERCENTILE = 0.10
+REVIEW_BUDGET = 25
+#: A budget never flags below this, so spare capacity yields nothing rather
+#: than noise.
+SCORE_FLOOR = 0.20
+
 REUSE_SATURATION_K = 2.0
 
 #: An attribute must be touched by at least this many distinct customers before
@@ -222,6 +232,10 @@ class DetectorConfig:
     #: stands unchanged until this has been measured on both corpora - see
     #: detection/population.py and scripts/evaluate_ieee.py.
     population_relative_reuse: bool = POPULATION_RELATIVE_REUSE
+    threshold_mode: str = THRESHOLD_MODE
+    score_percentile: float = SCORE_PERCENTILE
+    review_budget: int = REVIEW_BUDGET
+    score_floor: float = SCORE_FLOOR
     min_customers_per_shared_attribute: int = MIN_CUSTOMERS_PER_SHARED_ATTRIBUTE
 
     min_transactions_for_timing: int = MIN_TRANSACTIONS_FOR_TIMING
