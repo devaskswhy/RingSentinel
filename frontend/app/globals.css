@@ -262,67 +262,127 @@ h1, h2, h3, h4 {
 .rs-rule-t { border-top: 1px solid var(--line); }
 
 /* ---------------------------------------------------------------------------
-   Orientation panel — the pipeline, the review order, and the four claims.
-   --------------------------------------------------------------------------- */
+   Orientation panel.
 
-/* The pipeline reads as a row on a wide screen and a column on a narrow one.
-   The arrows are pseudo-content so they disappear at the wrap without any
-   JavaScript deciding when. */
-.rs-pipeline {
+   The first version packed four paragraphs, seven steps and a pipeline into
+   one strip. It was accurate and unreadable. This one is sized for a glance:
+   a headline at display scale, a diagram carrying the argument, and four
+   one-line claims. Whitespace is doing as much work as the type.
+   --------------------------------------------------------------------------- */
+.rs-orient {
+  max-width: 1500px;
+  margin-inline: auto;
+  padding: 2rem clamp(1.5rem, 3vw, 2.5rem) 2.6rem;
+}
+.rs-orient-shut { padding-block: 0.75rem 0.8rem; }
+
+.rs-orient-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text);
+  text-align: left;
+}
+
+/* Headline beside the diagram, stacked when there is not room for both. */
+.rs-orient-hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  align-items: center;
+  margin-top: 2.2rem;
+}
+@media (min-width: 900px) {
+  .rs-orient-hero {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: clamp(2rem, 5vw, 5rem);
+  }
+}
+
+.rs-orient-head {
+  font-size: clamp(1.75rem, 3.1vw, 2.9rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.rs-orient-sub {
+  margin: 1.1rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--step-0);
+  line-height: 1.55;
+  max-width: 38ch;
+}
+
+.rs-orient-figure { justify-self: end; width: 100%; }
+@media (max-width: 899px) { .rs-orient-figure { justify-self: start; } }
+
+.rs-diagram-cap {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+}
+.rs-diagram-note {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+/* The pipeline, as a single line of steps with chevrons between them. */
+.rs-orient-pipe {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 2.4rem;
-  align-items: flex-start;
-}
-
-.rs-pipeline-step {
-  position: relative;
-  font-size: var(--console-body);
-  padding-right: 0.2rem;
-}
-
-.rs-pipeline-arrow {
-  position: absolute;
-  right: -1.65rem;
-  top: 0.05rem;
-  color: var(--text-faint);
-}
-
-/* The human step is the one the whole system exists to protect. */
-.rs-pipeline-step[data-gate="true"] {
-  margin-left: -0.35rem;
-}
-
-.rs-orient-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.45rem;
-  grid-template-columns: 1fr;
-  max-width: 110ch;
-}
-
-@media (min-width: 1000px) {
-  .rs-orient-steps { grid-template-columns: 1fr 1fr; gap: 0.45rem 2.5rem; }
-}
-
-.rs-orient-steps li {
-  display: flex;
-  gap: 0.7rem;
-  align-items: baseline;
-  color: var(--text-muted);
+  align-items: center;
+  gap: 0.55rem 0.2rem;
+  margin-top: 2.6rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
   font-size: var(--console-small);
-  line-height: 1.55;
+  color: var(--text-muted);
+}
+.rs-pipe-step { white-space: nowrap; }
+.rs-pipe-step + .rs-pipe-step::before {
+  content: "→";
+  color: var(--text-faint);
+  margin: 0 0.75rem;
+}
+/* The one step a human performs, and the only place anything is decided. */
+.rs-pipe-step[data-gate="true"] {
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+  padding-left: 0.5rem;
 }
 
+/* Four claims, one line each. No paragraphs by design. */
 .rs-orient-claims {
-  margin-top: 1.7rem;
   display: grid;
-  gap: 1px;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  background: var(--line);
-  border: 1px solid var(--line);
+  grid-template-columns: 1fr;
+  gap: 1.6rem 3rem;
+  margin-top: 2.4rem;
+}
+@media (min-width: 700px) { .rs-orient-claims { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1200px) { .rs-orient-claims { grid-template-columns: repeat(4, 1fr); } }
+
+.rs-claim p {
+  margin: 0.6rem 0 0;
+  font-size: var(--step-0);
+  line-height: 1.45;
+  color: var(--text);
+  max-width: 30ch;
+}
+
+.rs-orient-foot {
+  margin: 2.4rem 0 0;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line);
+  color: var(--text-faint);
+  font-size: var(--console-small);
 }
 
 /* ---------------------------------------------------------------------------
