@@ -25,6 +25,7 @@ import {
 } from "@/lib/api";
 import { DURATION, EASE_OUT, STAGGER } from "@/lib/tokens";
 import ClusterDetail from "@/components/console/ClusterDetail";
+import Orientation from "@/components/console/Orientation";
 import Scorecard from "@/components/console/Scorecard";
 import { CadenceTag, ScoreBar, StatusTag } from "@/components/console/Bits";
 
@@ -272,13 +273,15 @@ export default function Console() {
             padding: "0.7rem 1.5rem",
             background: "rgba(239,68,68,0.1)",
             color: "var(--danger)",
-            fontSize: "var(--step--1)",
+            fontSize: "var(--console-body)",
             borderBottom: "1px solid rgba(239,68,68,0.25)",
           }}
         >
           {error} — is the API running at {process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}?
         </div>
       )}
+
+      <Orientation />
 
       <div style={{ padding: "1.5rem", borderBottom: "1px solid var(--line)" }}>
         <Scorecard data={scorecard} />
@@ -328,7 +331,8 @@ export default function Console() {
               loading queue…
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--step--1)" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--console-body)" }}
+              className="rs-anim">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--line-strong)" }}>
                   <th style={{ ...thStyle, cursor: "default" }}>id</th>
@@ -450,9 +454,9 @@ function Th({
 
 const thStyle: React.CSSProperties = {
   textAlign: "left",
-  padding: "0.5rem 0.6rem 0.5rem 0",
+  padding: "0.7rem 0.75rem 0.7rem 0",
   fontFamily: "var(--font-mono)",
-  fontSize: "0.7rem",
+  fontSize: "var(--console-label)",
   letterSpacing: "0.12em",
   textTransform: "uppercase",
   color: "var(--text-faint)",
@@ -462,14 +466,15 @@ const thStyle: React.CSSProperties = {
 };
 
 const tdStyle: React.CSSProperties = {
-  padding: "0.6rem 0.6rem 0.6rem 0",
+  padding: "0.8rem 0.75rem 0.8rem 0",
   verticalAlign: "middle",
+  fontSize: "var(--console-body)",
 };
 
 const filterButton: React.CSSProperties = {
   padding: "0.3rem 0.75rem",
   border: "1px solid",
-  fontSize: "0.72rem",
+  fontSize: "var(--console-small)",
   fontFamily: "var(--font-mono)",
   cursor: "pointer",
   transition: "background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease)",
@@ -480,7 +485,7 @@ const refreshButton: React.CSSProperties = {
   background: "transparent",
   border: "1px solid var(--line-strong)",
   color: "var(--text-muted)",
-  fontSize: "0.72rem",
+  fontSize: "var(--console-small)",
   fontFamily: "var(--font-mono)",
   cursor: "pointer",
 };

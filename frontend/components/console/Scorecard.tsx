@@ -223,7 +223,7 @@ const grid: React.CSSProperties = {
 const caveat: React.CSSProperties = {
   marginTop: "0.7rem",
   color: "var(--text-faint)",
-  fontSize: "0.72rem",
+  fontSize: "var(--console-small)",
   lineHeight: 1.55,
 };
 

@@ -126,6 +126,7 @@ export default function ClusterDetail({
       {/* ---- case file ------------------------------------------------- */}
       <div className="rs-detail-block rs-anim">
         <SectionTitle
+          step={1}
           right={
             case_file ? (
               <span className="rs-mono" style={{ color: "var(--text-faint)" }}>
@@ -146,7 +147,7 @@ export default function ClusterDetail({
               <div className="rs-label" style={{ marginBottom: "0.4rem" }}>
                 Confidence
               </div>
-              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--step--1)" }}>
+              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--console-body)" }}>
                 {case_file.confidence_note}
               </p>
             </div>
@@ -183,7 +184,7 @@ export default function ClusterDetail({
                 paddingTop: "0.8rem",
                 borderTop: "1px solid var(--line)",
                 color: "var(--text-faint)",
-                fontSize: "0.72rem",
+                fontSize: "var(--console-small)",
               }}
             >
               {case_file.disclaimer}
@@ -203,7 +204,7 @@ export default function ClusterDetail({
 
       {/* ---- evidence -------------------------------------------------- */}
       <div className="rs-detail-block rs-anim">
-        <SectionTitle>Why it scored {cluster.score.toFixed(3)}</SectionTitle>
+        <SectionTitle step={2}>Why it scored {cluster.score.toFixed(3)}</SectionTitle>
         <div style={{ ...panel, display: "grid", gap: "0.7rem" }}>
           {Object.entries(evidence.signals).map(([name, s]) => (
             <div key={name}>
@@ -211,7 +212,7 @@ export default function ClusterDetail({
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  fontSize: "var(--step--1)",
+                  fontSize: "var(--console-body)",
                   marginBottom: "0.25rem",
                 }}
               >
@@ -231,7 +232,7 @@ export default function ClusterDetail({
                   }}
                 />
               </div>
-              <div style={{ color: "var(--text-faint)", fontSize: "0.7rem", marginTop: "0.25rem" }}>
+              <div style={{ color: "var(--text-faint)", fontSize: "var(--console-label)", marginTop: "0.25rem" }}>
                 {s.explanation}
               </div>
             </div>
@@ -261,7 +262,7 @@ export default function ClusterDetail({
               cluster median gap {evidence.timing.cluster_median_gap_seconds}s vs
               platform baseline {Math.round(evidence.timing.baseline_median_gap_seconds)}s
             </div>
-            <div style={{ color: "var(--text-faint)", fontSize: "0.72rem", marginTop: "0.35rem" }}>
+            <div style={{ color: "var(--text-faint)", fontSize: "var(--console-small)", marginTop: "0.35rem" }}>
               {evidence.cadence.reason}
             </div>
           </div>
@@ -275,6 +276,7 @@ export default function ClusterDetail({
       {counterfactual && (
         <div className="rs-detail-block rs-anim">
           <SectionTitle
+            step={3}
             right={
               <span className="rs-mono" style={{ color: "var(--text-faint)" }}>
                 {counterfactual.gap >= 0 ? "+" : ""}
@@ -332,7 +334,7 @@ export default function ClusterDetail({
                 marginTop: "0.85rem",
                 marginBottom: 0,
                 color: "var(--text-faint)",
-                fontSize: "var(--step--1)",
+                fontSize: "var(--console-body)",
               }}
             >
               {counterfactual.note}
@@ -344,6 +346,7 @@ export default function ClusterDetail({
       {/* ---- graph ----------------------------------------------------- */}
       <div className="rs-detail-block rs-anim">
         <SectionTitle
+          step={4}
           right={
             <span className="rs-mono" style={{ color: "var(--text-faint)" }}>
               {graph.nodes.length} nodes · {graph.edges.length} edges
@@ -359,7 +362,7 @@ export default function ClusterDetail({
 
       {/* ---- decision -------------------------------------------------- */}
       <div className="rs-detail-block rs-anim">
-        <SectionTitle>Decision</SectionTitle>
+        <SectionTitle step={5}>Decision</SectionTitle>
         <div style={panel}>
           {decided ? (
             <p style={{ margin: 0, color: "var(--text-muted)" }}>
@@ -372,7 +375,7 @@ export default function ClusterDetail({
                 style={{
                   marginTop: 0,
                   color: "var(--text-faint)",
-                  fontSize: "0.75rem",
+                  fontSize: "var(--console-label)",
                 }}
               >
                 Neither action blocks, freezes, or restricts any account.
@@ -443,7 +446,7 @@ export default function ClusterDetail({
           )}
 
           {error && (
-            <p style={{ color: "var(--danger)", fontSize: "var(--step--1)", marginBottom: 0 }}>
+            <p style={{ color: "var(--danger)", fontSize: "var(--console-body)", marginBottom: 0 }}>
               {error}
             </p>
           )}
@@ -452,7 +455,7 @@ export default function ClusterDetail({
 
       {/* ---- audit ----------------------------------------------------- */}
       <div className="rs-detail-block rs-anim">
-        <SectionTitle>Audit trail · append-only</SectionTitle>
+        <SectionTitle step={6}>Audit trail · append-only</SectionTitle>
         <AuditTrail entries={audit_trail} />
       </div>
 
@@ -464,6 +467,7 @@ export default function ClusterDetail({
           product rather than from curl. */}
       <div className="rs-detail-block rs-anim">
         <SectionTitle
+          step={7}
           right={
             pack && (
               <span
@@ -488,7 +492,7 @@ export default function ClusterDetail({
                 style={{
                   margin: "0 0 0.9rem",
                   color: "var(--text-muted)",
-                  fontSize: "var(--step--1)",
+                  fontSize: "var(--console-body)",
                 }}
               >
                 One self-contained bundle: the evidence, Claude&apos;s explanation
@@ -517,7 +521,7 @@ export default function ClusterDetail({
                 <p
                   style={{
                     color: "var(--danger)",
-                    fontSize: "var(--step--1)",
+                    fontSize: "var(--console-body)",
                     marginBottom: 0,
                   }}
                 >
@@ -569,7 +573,7 @@ export default function ClusterDetail({
                 style={{
                   margin: 0,
                   color: "var(--text-faint)",
-                  fontSize: "var(--step--1)",
+                  fontSize: "var(--console-body)",
                 }}
               >
                 {pack.bundle_digest.note}
@@ -587,7 +591,7 @@ export default function ClusterDetail({
                     margin: "0.7rem 0 0",
                     paddingLeft: "1.1rem",
                     color: "var(--text-muted)",
-                    fontSize: "var(--step--1)",
+                    fontSize: "var(--console-body)",
                     display: "grid",
                     gap: "0.45rem",
                   }}
@@ -625,7 +629,7 @@ const listStyle: React.CSSProperties = {
   margin: 0,
   paddingLeft: "1.1rem",
   color: "var(--text-muted)",
-  fontSize: "var(--step--1)",
+  fontSize: "var(--console-body)",
   lineHeight: 1.7,
 };
 
@@ -635,13 +639,13 @@ const inputStyle: React.CSSProperties = {
   color: "var(--text)",
   padding: "0.6rem 0.7rem",
   fontFamily: "var(--font-body)",
-  fontSize: "var(--step--1)",
+  fontSize: "var(--console-body)",
   resize: "vertical",
 };
 
 const buttonBase: React.CSSProperties = {
   padding: "0.55rem 1rem",
-  fontSize: "var(--step--1)",
+  fontSize: "var(--console-body)",
   fontWeight: 600,
   border: "1px solid transparent",
   cursor: "pointer",

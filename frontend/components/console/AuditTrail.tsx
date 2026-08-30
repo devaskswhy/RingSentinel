@@ -108,7 +108,7 @@ export default function AuditTrail({ entries }: { entries: AuditEntry[] }) {
             >
               {entry.actor}
             </span>
-            <span style={{ fontSize: "var(--step--1)", color: "var(--text)" }}>
+            <span style={{ fontSize: "var(--console-body)", color: "var(--text)" }}>
               {ACTION_LABEL[entry.action] ?? entry.action}
             </span>
             <span className="rs-mono" style={{ color: "var(--text-faint)", marginLeft: "auto" }}>
@@ -125,7 +125,7 @@ export default function AuditTrail({ entries }: { entries: AuditEntry[] }) {
             <div
               style={{
                 color: "var(--text-muted)",
-                fontSize: "0.76rem",
+                fontSize: "var(--console-small)",
                 marginTop: "0.25rem",
                 lineHeight: 1.5,
               }}

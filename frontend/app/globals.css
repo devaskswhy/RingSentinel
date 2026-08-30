@@ -46,6 +46,20 @@
   --step-6: 4.2rem;
   --step-7: 5.8rem;
 
+  /* ---------------------------------------------------------------------
+     Console type sizes.
+
+     The console ran almost entirely on --step--1 (12.8px) with secondary text
+     at 0.7rem. That is defensible for an analyst working the queue eight hours
+     a day on a monitor two feet away, and wrong for every other way this gets
+     looked at: a judge on a projector, a recruiter on a laptop, a recorded
+     demo scaled into a video frame. Legibility beats density here, so the
+     floor moved up.
+     --------------------------------------------------------------------- */
+  --console-body: 0.9375rem;   /* 15px — table rows, prose, the default */
+  --console-small: 0.8125rem;  /* 13px — secondary detail, never primary */
+  --console-label: 0.75rem;    /* 12px — uppercase section labels */
+
   --ease: cubic-bezier(0.65, 0, 0.35, 1); /* CSS mirror of power3.inOut */
   --dur-fast: 0.25s;
   --dur-slow: 1s;
@@ -176,14 +190,14 @@ h1, h2, h3, h4 {
 
 .rs-mono {
   font-family: var(--font-mono);
-  font-size: var(--step--1);
+  font-size: var(--console-small);
   letter-spacing: -0.01em;
 }
 
 .rs-label {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.16em;
+  font-size: var(--console-label);
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
@@ -205,9 +219,9 @@ h1, h2, h3, h4 {
   padding: 0.1em 0 0.1em 0.5em;
   border-left: 1px solid currentColor;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 500;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   white-space: nowrap;
   line-height: 1.4;
@@ -246,6 +260,70 @@ h1, h2, h3, h4 {
 /* Hairline rules. A table of real data wants rules, not gaps between cards. */
 .rs-rule-b { border-bottom: 1px solid var(--line); }
 .rs-rule-t { border-top: 1px solid var(--line); }
+
+/* ---------------------------------------------------------------------------
+   Orientation panel — the pipeline, the review order, and the four claims.
+   --------------------------------------------------------------------------- */
+
+/* The pipeline reads as a row on a wide screen and a column on a narrow one.
+   The arrows are pseudo-content so they disappear at the wrap without any
+   JavaScript deciding when. */
+.rs-pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2.4rem;
+  align-items: flex-start;
+}
+
+.rs-pipeline-step {
+  position: relative;
+  font-size: var(--console-body);
+  padding-right: 0.2rem;
+}
+
+.rs-pipeline-arrow {
+  position: absolute;
+  right: -1.65rem;
+  top: 0.05rem;
+  color: var(--text-faint);
+}
+
+/* The human step is the one the whole system exists to protect. */
+.rs-pipeline-step[data-gate="true"] {
+  margin-left: -0.35rem;
+}
+
+.rs-orient-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 1fr;
+  max-width: 110ch;
+}
+
+@media (min-width: 1000px) {
+  .rs-orient-steps { grid-template-columns: 1fr 1fr; gap: 0.45rem 2.5rem; }
+}
+
+.rs-orient-steps li {
+  display: flex;
+  gap: 0.7rem;
+  align-items: baseline;
+  color: var(--text-muted);
+  font-size: var(--console-small);
+  line-height: 1.55;
+}
+
+.rs-orient-claims {
+  margin-top: 1.7rem;
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  background: var(--line);
+  border: 1px solid var(--line);
+}
 
 /* ---------------------------------------------------------------------------
    Queue rows.

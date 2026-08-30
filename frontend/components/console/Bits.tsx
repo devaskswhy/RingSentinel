@@ -157,7 +157,7 @@ export function Metric({
         {value}
       </div>
       {sub && (
-        <div style={{ color: "var(--text-faint)", fontSize: "0.72rem", marginTop: "0.35rem" }}>
+        <div style={{ color: "var(--text-faint)", fontSize: "var(--console-small)", marginTop: "0.35rem" }}>
           {sub}
         </div>
       )}
@@ -165,7 +165,24 @@ export function Metric({
   );
 }
 
-export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
+/**
+ * Section heading, optionally numbered.
+ *
+ * The numbers exist because the panel is a procedure, not a dashboard. Someone
+ * opening this cold — a judge, a new analyst — needs to know that reading the
+ * case file comes before deciding, and that the decision is not the last step
+ * because the audit record is. Unnumbered sections read as a pile of widgets
+ * and leave the reviewer to guess the order.
+ */
+export function SectionTitle({
+  children,
+  right,
+  step,
+}: {
+  children: React.ReactNode;
+  right?: React.ReactNode;
+  step?: number;
+}) {
   return (
     <div
       style={{
@@ -173,10 +190,28 @@ export function SectionTitle({ children, right }: { children: React.ReactNode; r
         alignItems: "center",
         justifyContent: "space-between",
         gap: "1rem",
-        marginBottom: "0.85rem",
+        marginBottom: "0.9rem",
+        paddingBottom: "0.5rem",
+        borderBottom: "1px solid var(--line)",
       }}
     >
-      <span className="rs-label">{children}</span>
+      <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.6rem" }}>
+        {step !== undefined && (
+          <span
+            className="rs-mono"
+            style={{
+              color: "var(--accent)",
+              fontVariantNumeric: "tabular-nums",
+              fontSize: "var(--console-label)",
+            }}
+          >
+            {String(step).padStart(2, "0")}
+          </span>
+        )}
+        <span className="rs-label" style={{ color: "var(--text-muted)" }}>
+          {children}
+        </span>
+      </span>
       {right}
     </div>
   );
