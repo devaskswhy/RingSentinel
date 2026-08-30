@@ -18,6 +18,12 @@
 
 ---
 
+<p align="center">
+  <img src="docs/img/landing-hero.png" alt="RingSentinel landing page showing 1,499 transactions, 12 of 12 rings found and 0 false flags" width="100%">
+</p>
+
+---
+
 ## The one-minute version
 
 |  |  |
@@ -25,7 +31,7 @@
 | **Problem** | Card-testing, promo-farming and return-abuse crews are invisible per transaction. Each order is small, valid, in policy — and the coordination only shows up as a shape across accounts. |
 | **Approach** | Graph the shared attributes. Cluster. Score with four named signals. Explain with Claude. Gate on a human. |
 | **On our corpus** | **12/12 rings found, 0 false flags** — including 4/4 on a held-out split opened once |
-| **On real data** | **1.62× top-decile lift** on 590,540 IEEE-CIS transactions we did not generate |
+| **On real data** | Honest failure: **1.12× top-decile lift** on 524,834 IEEE-CIS transactions we did not generate — measured, published, not deployed |
 | **What it will never do** | Block, freeze or decline anyone. No code path exists; a Postgres trigger enforces it |
 | **Cost** | **$0.07/month** of model spend at 100k transactions — 2,137× cheaper than scoring each one |
 
@@ -123,32 +129,41 @@ byte-identical to the commit that produced it. Nothing was tuned afterwards.
 ### On real data we did not create
 
 Because the caveat above is not good enough on its own, the same detector was
-run unmodified against **IEEE-CIS Fraud Detection** — 590,540 real transactions
-with a 3.50% fraud base rate, where a single card carries 14,112 of them.
+run unmodified against **IEEE-CIS Fraud Detection**: 590,540 real transactions,
+of which **524,834** carry the card and address fields this needs, at a
+**2.46%** fraud base rate. One card in that data carries 14,112 transactions;
+the busiest attribute in our own corpus is shared by nine accounts.
 
-**The first result was a failure, and it is committed before any attempt to fix
-it.** At the calibrated threshold the detector flagged **99% of the dataset**
-with a lift of **1.01×**. The diagnostics say why: attribute reuse saturated at
-0.97 because real clusters run 50–282 accounts, and the assumption that sharing
-above a small floor is suspicious does not survive real payment data.
+**It failed, and the failure is committed before any attempt to fix it.** At the
+calibrated threshold the detector flagged **100% of candidates** with a lift of
+**1.04×**. The diagnostics say why: attribute reuse saturates because real
+clusters run to 1,568 accounts, and the assumption that sharing above a small
+floor is suspicious does not survive real payment data.
 
-Digging further produced the useful finding:
+Ranking by score does better than the threshold, but not by much:
 
 | Slice by score | Fraud rate | Lift |
 |---|---|---|
-| top 2% | 3.43% | **1.61×** |
-| top 10% | 3.23% | **1.52×** |
-| top 25% | 3.13% | 1.47× |
-| top 50% | 2.45% | 1.15× |
-| everything | 2.17% | 1.02× |
+| top 2% | 0.89% | **0.36× — worse than the base rate** |
+| top 10% | 2.76% | **1.12×** |
+| top 25% | 2.85% | 1.16× |
+| top 50% | 2.61% | 1.06× |
+| everything | 2.56% | 1.04× |
 
-**The score ranks real fraud risk. The absolute threshold does not transfer.**
-Selecting by review capacity instead of a fixed cut recovers **1.43×** on the
-same data. 1.5× is modest and is reported as modest — but it is real, measured,
-reproducible, and on data this project did not build.
+**A weak but non-zero ranking signal, below what would justify deploying this
+against real traffic.** That is the tool's own verdict and it is not softened
+here.
+
+> ⚠️ **An earlier number in this repository was wrong, and the correction is
+> the point.** The first real-data run used a 20,000-row slice and showed
+> **1.62×** top-decile lift. On the full 524,834 rows it falls to **1.12×**, and
+> the top 2% — the most confident predictions — scores **0.36×**, worse than
+> picking at random. The slice result was a small-sample artefact. Both are kept
+> so the mistake is visible, because a project that only publishes the
+> measurement that flattered it has not measured anything.
 
 ```bash
-docker compose exec backend python -m scripts.evaluate_ieee --limit 100000 --budget 25
+docker compose exec backend python -m scripts.evaluate_ieee --limit 0   # all 524,834
 ```
 
 ### Does the scorer beat a one-line heuristic?
@@ -170,7 +185,12 @@ published rather than hidden.
 
 ### So does each signal earn its weight?
 
-| Weighting | Seeded recall | Real-data top-decile lift |
+Ablation is the one place a 20,000-row slice is still the right instrument:
+holding the sample fixed is what makes the five runs comparable, and the
+*differences* between rows are the finding, not the absolute figures. Every
+number in the right-hand column is from that same slice.
+
+| Weighting | Seeded recall | Top-decile lift *(20k slice)* |
 |---|---|---|
 | All four signals | 100% | **1.62×** |
 | without attribute reuse | 67% | 1.35× |
@@ -298,6 +318,96 @@ would make the spoken version differ from the recorded one.
 
 ---
 
+## Architecture
+
+Three tiers, deployed separately on purpose — plus a set of paths that
+deliberately never leave the laptop.
+
+```
+        a reviewer                                    a judge, six weeks later
+             │                                                  │
+             └──────────────────────┬───────────────────────────┘
+                                    ▼
+                 ┌──────────────────────────────────────┐
+                 │  VERCEL · Next.js 16 · React 19      │   static, no cold start
+                 │  /          the argument             │   GSAP + Lenis, one clock
+                 │  /console   the review queue         │   polls every 4s
+                 │  Web Speech API · 8 languages        │   0.5× – 2×, no paid TTS
+                 └──────────────────┬───────────────────┘
+                                    │  HTTPS · typed client (lib/api.ts)
+                                    ▼
+                 ┌──────────────────────────────────────┐
+   Razorpay ────▶│  RENDER · FastAPI + Python 3.11      │
+   test-mode     │  ingest → detection → THE HUMAN GATE │   CLAUDE_GENERATION
+   webhook       │  NetworkX 3.6 · deterministic        │   _ENABLED=false here
+   (local only)  └──────────────────┬───────────────────┘
+                                    │  SQLAlchemy 2 + psycopg3
+                                    ▼
+                 ┌──────────────────────────────────────┐
+                 │  NEON · PostgreSQL 16                │   free tier is permanent;
+                 │  6 tables · 1 label-free view        │   Render's expires at 30d
+                 │  3 triggers whose whole job is "no"  │
+                 └──────────────────────────────────────┘
+```
+
+**The landing page does not depend on the backend.** Every figure on it — the
+corpus counts, all twelve cluster scores, the real-data table — renders from
+measured fallbacks. Verified by stopping the API and reloading. So a free tier
+that has gone to sleep, or expired, never costs a reader the argument.
+
+### What runs where, and why
+
+| | Where | Why there |
+|---|---|---|
+| Landing + console | Vercel | Static build. A judge clicking the link waits for nothing. |
+| API, detector, gate | Render | Needs a long-running process and a container runtime. |
+| Database | **Neon** | Render's free Postgres is **deleted after 30 days**. A submission opened six weeks later must still work. |
+| Case-file generation | **Local only** | The Agent SDK's terms forbid serving other users on a personal subscription. The deployed instance carries no Claude credential at all and returns a 503 that explains itself. |
+| Razorpay order creation | **Local only** | `scripts/seed_rings.py` creates real test-mode orders. The deployed instance reads the corpus that produced. |
+| IEEE-CIS evaluation | **Local only** | A 683 MB dataset, licensed on download, not redistributed here. |
+
+### The three things the database refuses
+
+Not conventions, not code review, not a prompt. Triggers, in migrations
+`0003`/`0005`/`0007`, each one verifiable by trying to break it:
+
+| Trigger | Refuses |
+|---|---|
+| `trg_clusters_status_human_only` | Any status change outside a human review transaction; any move *into* a decision without ≥5 characters of written reason; any move *out of* one, ever |
+| `trg_audit_log_no_update_delete` | `UPDATE`, `DELETE`, `TRUNCATE` on the audit log |
+| `trg_audit_log_chain` | Nothing — it *computes* `row_hash = sha256(prev_hash ‖ row)` on insert, under a transaction-scoped advisory lock so two writers cannot fork the chain |
+
+The first two block tampering. The third makes it **detectable**, which is the
+stronger claim: someone with raw database access can drop a trigger and rewrite
+a row, but they cannot make the arithmetic add up afterwards. Both tamper tests
+were run for real and both exit non-zero — see [`verify_human_gate.py`](backend/scripts/verify_human_gate.py).
+
+### Two package boundaries that carry weight
+
+```
+backend/
+├── detection/     MAY NOT read ground-truth labels or import evaluation.*
+│                  Reads v_transactions_detector, a view with the label column
+│                  removed. Enforced by an AST walk, not a grep — graph.py
+│                  legitimately mentions the column in a docstring.
+│
+├── evaluation/    MAY read labels. Never imported by detection/.
+│                  Selects splits and hands the detector an OPAQUE set of
+│                  transaction ids to exclude. The detector is never told
+│                  what a split is.
+│
+└── app/routers/clusters.py
+                   The only module in the project that may write a decision,
+                   and the only one that sets ringsentinel.human_review — the
+                   transaction-local flag the trigger demands.
+```
+
+`scripts/verify_detector_isolation.py` proves the first statically.
+`scripts/verify_human_gate.py` proves the second statically **and** at runtime,
+by attempting an unguarded update and requiring the database to reject it.
+
+---
+
 ## Running it
 
 ```bash
@@ -325,7 +435,7 @@ docker compose exec backend python -m scripts.verify_explanation_grader
 # the measurements that made this honest
 docker compose exec backend python -m scripts.compare_baselines
 docker compose exec backend python -m scripts.ablate_signals --ieee 20000
-docker compose exec backend python -m scripts.evaluate_ieee --budget 25
+docker compose exec backend python -m scripts.evaluate_ieee --limit 0
 docker compose exec backend python -m scripts.adversarial_cases
 docker compose exec backend python -m scripts.monetization --merchants 50 --transactions 2000
 ```
@@ -349,9 +459,13 @@ Stated here rather than discovered by someone else:
 
 - **The corpus is synthetic and self-generated.** Separable by construction.
   The IEEE-CIS run exists because that caveat is not good enough alone.
-- **1.5× lift is modest.** It is real and reproducible; it is not a production
-  claim, and the account proxy it rests on (card + address) is a modelling
-  choice, not a fact in the data.
+- **The real-data lift is 1.12× and that is weak.** Below what would justify
+  deploying against real traffic. The account proxy it rests on (card1 +
+  addr1) is a modelling choice, not a fact in the data — IEEE-CIS has no
+  customer column at all.
+- **A 20k slice showed 1.62× and the full dataset showed 1.12×.** Both are in
+  the repository. Sample size mattered more than we assumed, and the smaller
+  number is the one to quote.
 - **The adversarial realiser is imperfect.** Twelve accounts over six
   instruments becomes six disjoint pairs, so some cases test something adjacent
   to their design. Recorded rather than quietly re-run until it looked better.
@@ -367,16 +481,74 @@ Stated here rather than discovered by someone else:
 
 ## Screenshots
 
-<!-- Add captures to docs/img/ and they will render here. -->
+Every figure in these captures is live data from the seeded corpus — real
+Razorpay test-mode orders, real detector scores, real Claude case files. None of
+it is mocked up.
 
-| | |
-|---|---|
-| ![Landing](docs/img/landing-hero.png) | ![Transaction field](docs/img/landing-field.png) |
-| **The landing page** — 1,499 real transactions, the corpus donut, the measured result | **The field mid-scroll** — 599 transactions migrating into the twelve real rings |
-| ![Threshold scrubber](docs/img/scrubber.png) | ![Console queue](docs/img/console-queue.png) |
-| **Section 06** — drag the threshold; every tick is a real cluster score | **The review console** — the queue, and what to do on the page |
-| ![Cluster case](docs/img/console-case.png) | ![Evidence pack](docs/img/console-evidence.png) |
-| **One cluster** — four named signals, the graph with its callouts | **Verify the chain** — 1,879 audit rows re-checked live |
+### Surface A — the argument
+
+<p align="center">
+  <img src="docs/img/landing-convergence.png" alt="Twelve real ring structures rendered as a scatter of accounts converging on shared attributes" width="100%">
+</p>
+
+**The animation is the argument, not decoration.** Those are the twelve actual
+rings — 68 accounts — laid out by the shared attributes they funnel through.
+Scattered they are individually unremarkable transactions, which is exactly what
+a per-transaction model sees. Nothing is added on scroll; the data was always
+that shape.
+
+<p align="center">
+  <img src="docs/img/landing-threshold.png" alt="Interactive threshold scrubber showing every real cluster score as a tick" width="100%">
+</p>
+
+**Drag the threshold yourself.** Every tick is a real cluster the detector
+scored. Nothing changes anywhere between **0.300** and **0.370** — that 0.070 of
+slack is the margin, and it is why the threshold is a measurement rather than a
+choice. Move the handle past a tick and watch that ring stop being flagged.
+
+<p align="center">
+  <img src="docs/img/landing-real-data.png" alt="The real-data section, with the spoken explainer panel open in eight languages" width="100%">
+</p>
+
+**The section about the failure — and the voice guide, open.** The explainers
+are scripted, translated and read by the browser's own speech engine: eight
+languages, five speeds, transcript always shown beside the audio. It is not a
+chatbot and it cannot answer arbitrary questions, deliberately — a spoken claim
+is harder to fact-check than a written one, so every one of them is checked
+against the repo before it is recorded.
+
+### Surface B — the review console
+
+<p align="center">
+  <img src="docs/img/console-orientation.png" alt="Console orientation panel: what others miss, what we do, what we never do, what we got wrong" width="100%">
+</p>
+
+**A reviewer's first thirty seconds.** The pipeline in one line, and four cards —
+including *what we got wrong*, which is on the screen a reviewer uses rather than
+buried in a document nobody opens.
+
+<p align="center">
+  <img src="docs/img/console-graph.png" alt="Entity graph for one cluster with arrow callouts explaining each visual element" width="100%">
+</p>
+
+**The graph, with the callouts pointing at the thing they describe.** Circles are
+accounts, grey diamonds are attributes more than one account used, edge thickness
+is shared transaction count. Above it sits the counterfactual: *0.846 → 0.768
+discounting the shared device entirely — does not cross.* That question is only
+answerable because the score is a sum of named signals; a model output could not
+be interrogated this way.
+
+<p align="center">
+  <img src="docs/img/console-audit-voice.png" alt="Append-only audit trail and the live evidence-pack chain verification" width="100%">
+</p>
+
+**Who decided what, and proof nobody rewrote it.** Every row carries its actor —
+`system` flagged, `claude` explained, `human` decided, with the written reason
+the database refused to accept without. Below it, the evidence pack re-verifies
+all **1,879** chained rows live. The language is exact: `chain_intact` is the
+real guarantee, while `bundle_digest` is *a checksum, not a signature* — it
+detects corruption in transit and proves nothing about origin, because there is
+no key.
 
 ---
 

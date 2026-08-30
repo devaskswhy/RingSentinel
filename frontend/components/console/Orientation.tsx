@@ -39,7 +39,7 @@ const CLAIMS = [
   { label: "What others miss", line: "Coordination lives between transactions, not inside one." },
   { label: "What we do", line: "Four named signals. Ablation shows each one earns its weight on real data." },
   { label: "What we never do", line: "Nothing here can block anyone. A database trigger enforces it." },
-  { label: "What we got wrong", line: "On 590k real transactions it flagged 99%. That is in the repo too." },
+  { label: "What we got wrong", line: "On 524,834 real transactions it barely beat chance. That is in the repo too." },
 ];
 
 export default function Orientation() {

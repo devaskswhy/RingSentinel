@@ -167,28 +167,50 @@ export default function WhyUs() {
             And then we tested it on data we did not make
           </div>
           <h3 className="rs-honest-head">
-            590,540 real transactions. It flagged 99% of them.
+            524,834 real transactions. It flagged all of them.
           </h3>
           <p className="rs-honest-body">
-            Run against the IEEE-CIS fraud dataset, the threshold calibrated on
-            our own corpus admitted almost everything and separated nothing —
-            lift 1.02× against a 3.50% base rate. The score still <em>ranked</em>
-            real fraud risk at <strong>1.62× in its top decile</strong>; what did
-            not survive was the absolute cut, because real payment data compresses
-            the score range. Selecting by review capacity instead recovers
-            <strong> 1.43×</strong>.
+            Run against the IEEE-CIS fraud dataset — real payment data, a 2.46%
+            fraud base rate, one card carrying 14,112 transactions — the
+            threshold calibrated on our own corpus separated nothing.{" "}
+            <strong>Lift 1.04×.</strong> Ranking by score does better, but not by
+            much: <strong>1.12×</strong> in the top decile, and the top 2% scores{" "}
+            <strong>0.36×</strong> — worse than picking at random.
+          </p>
+
+          <div className="rs-honest-table">
+            {[
+              ["top 2%", "0.89%", "0.36×"],
+              ["top 10%", "2.76%", "1.12×"],
+              ["top 25%", "2.85%", "1.16×"],
+              ["everything", "2.56%", "1.04×"],
+            ].map(([slice, rate, lift]) => (
+              <div key={slice}>
+                <span>{slice}</span>
+                <span>{rate}</span>
+                <b data-weak={lift === "0.36×"}>{lift}</b>
+              </div>
+            ))}
+          </div>
+
+          <p className="rs-honest-body">
+            An earlier version of this page said <strong>1.62×</strong>. That was
+            measured on a 20,000-row slice and did not survive the full dataset.
+            Both numbers are in the repository, because a project that publishes
+            only the measurement that flattered it has not measured anything.
           </p>
           <p className="rs-honest-body">
-            We then asked Claude — which has never seen the detector&apos;s source —
-            to design cases against its published description. It found five. The
-            detector handled <strong>none of them</strong>: three rings missed, and
-            two innocent cases, a family and a campus kiosk cohort, wrongly
+            We also asked Claude — which has never seen the detector&apos;s source
+            — to design cases against its published description. It found five.
+            The detector handled <strong>none of them</strong>: three rings missed,
+            and two innocent cases, a family and a campus kiosk cohort, wrongly
             flagged.
           </p>
           <p className="rs-honest-body">
-            Both results are in the repository with the code that produced them.
-            A detector that has only ever been measured on data its authors built
-            has not been measured.
+            This is the honest state of it: the approach works on data shaped
+            like our corpus and is not yet good enough for real traffic. Every
+            figure above is reproducible from the repository with the code that
+            produced it.
           </p>
         </div>
       </div>

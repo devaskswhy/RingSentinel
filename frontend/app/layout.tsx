@@ -30,7 +30,18 @@ const inter = Inter({
 const DESCRIPTION =
   "Fraud rings are invisible per transaction and obvious as a graph. RingSentinel finds the cluster, explains it in plain language, and puts a human in front of every decision.";
 
+// Without this, Next resolves the generated card against http://localhost:3000
+// and every link preview of the deployed site points at nothing. Vercel exposes
+// the deployment host at build time; the production domain is the fallback so a
+// local build still produces absolute URLs.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL
+  ? process.env.NEXT_PUBLIC_SITE_URL
+  : process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "https://ring-sentinel-khaki.vercel.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "RingSentinel — coordinated fraud, seen as a graph",
   description: DESCRIPTION,
   applicationName: "RingSentinel",
