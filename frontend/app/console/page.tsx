@@ -98,10 +98,12 @@ export default function Console() {
     }
   }, []);
 
+  // Nothing is opened on arrival. The console used to select the first cluster
+  // for you, which meant landing on someone's case before you had seen the
+  // queue it came from — and made the first cluster look privileged when the
+  // sort order is the only thing that put it there.
   useEffect(() => {
-    refresh().then((list) => {
-      if (list.length && !selected) setSelected(list[0].id);
-    });
+    refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -318,11 +320,7 @@ export default function Console() {
 
       <div style={{ flex: 1 }}>
         {/* ---- queue, full width -------------------------------------- */}
-        <div
-          className="rs-console-shell rs-queue"
-          data-compact={Boolean(selected)}
-          style={{ paddingBlock: "1.75rem 2.5rem" }}
-        >
+        <div className="rs-console-shell" style={{ paddingBlock: "1.75rem 2.5rem" }}>
           <div
             style={{
               display: "flex",
@@ -359,6 +357,32 @@ export default function Console() {
             </span>
           </div>
 
+          {selected ? (
+            <div className="rs-queue-picker">
+              <label className="rs-label" htmlFor="rs-cluster-select">
+                Cluster
+              </label>
+              <select
+                id="rs-cluster-select"
+                className="rs-focus"
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+              >
+                {visible.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.id.slice(0, 8)} · {c.score.toFixed(3)} · {c.size} accounts ·{" "}
+                    {c.status === "cleared" ? "approved" : c.status.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => setSelected(null)}
+                className="rs-focus rs-step-btn"
+              >
+                show the full queue
+              </button>
+            </div>
+          ) : (
           <div className="rs-queue-scroll">
           {loading ? (
             <div className="rs-mono" style={{ color: "var(--text-faint)" }}>
@@ -436,6 +460,7 @@ export default function Console() {
             </div>
           )}
           </div>
+          )}
           {!loading && visible.length > 0 && !selected && (
             <p className="rs-queue-hint">
               Select a cluster to open its full case below — the evidence, the

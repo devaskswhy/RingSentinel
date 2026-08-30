@@ -751,30 +751,41 @@ h1, h2, h3, h4 {
 .rs-detail-stage .rs-detail-block h2 { max-width: 74ch; }
 
 /* ---------------------------------------------------------------------------
-   Queue: full height until a case is open, then a scroll box.
+   Queue: the full table until a case is open, then a single dropdown.
 
    With twelve clusters at full row height, opening one meant scrolling past
-   the entire queue to reach it. Collapsing the queue keeps both on screen —
-   the case starts near the top of the viewport, and the queue stays right
-   above it so the next cluster is one click away rather than one scroll back.
+   the whole queue to reach it. Collapsing to one control removes the scroll
+   entirely: the case starts at the top of the viewport, and switching cluster
+   is one select away rather than a scroll back up. The full table is one
+   button away whenever it is wanted.
    --------------------------------------------------------------------------- */
-.rs-queue-scroll {
-  transition: max-height var(--dur-slow) var(--ease);
-}
-
-.rs-queue[data-compact="true"] .rs-queue-scroll {
-  max-height: 20rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+.rs-queue-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1rem;
   border: 1px solid var(--line);
+  background: var(--ink-panel);
 }
 
-/* The header has to stay put once the body scrolls under it. */
-.rs-queue[data-compact="true"] .rs-queue-scroll thead th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+.rs-queue-picker select {
+  flex: 1 1 22rem;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--console-body);
+  color: var(--text);
   background: var(--ink);
+  border: 1px solid var(--line-strong);
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+  /* The native arrow is fine; restyling a select's internals cross-browser
+     costs more than it returns for one control. */
+}
+.rs-queue-picker select:hover { border-color: var(--accent); }
+.rs-queue-picker option {
+  background: var(--ink);
+  color: var(--text);
 }
 
 /* Evidence headline: the 280px cap and ellipsis were sized for the old
