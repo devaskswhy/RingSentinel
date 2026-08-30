@@ -69,6 +69,8 @@ export default function VoiceGuide({
     });
   }
 
+  const activeTopic = topics.find((x) => x.id === active) ?? null;
+
   return (
     <div className="rs-guide">
       {open && (
@@ -82,6 +84,10 @@ export default function VoiceGuide({
             </button>
           </div>
 
+          {/* The question list stays put. It used to sit above the expanded
+              transcript inside one scroll region, so opening a long answer
+              pushed every other question out of view and the panel had to be
+              closed and reopened to ask a second one. */}
           <ul className="rs-guide-list">
             {topics.map((t) => {
               const isActive = active === t.id;
@@ -91,6 +97,7 @@ export default function VoiceGuide({
                   <button
                     onClick={() => toggleTopic(t)}
                     className="rs-focus rs-guide-q"
+                    data-active={isActive}
                     aria-expanded={isActive}
                   >
                     <span className="rs-guide-icon" data-playing={isPlaying} aria-hidden="true">
@@ -98,31 +105,33 @@ export default function VoiceGuide({
                     </span>
                     <span>{t.question}</span>
                   </button>
-
-                  {isActive && (
-                    <div className="rs-guide-body">
-                      <p>{t.text}</p>
-                      <div className="rs-guide-meta">
-                        <span>{t.source}</span>
-                        {supported ? (
-                          <button
-                            onClick={() => (isPlaying ? cancelRef.current?.() : play(t))}
-                            className="rs-focus rs-guide-replay"
-                          >
-                            {isPlaying ? "stop" : "play again"}
-                          </button>
-                        ) : (
-                          <span style={{ color: "var(--text-faint)" }}>
-                            no speech voice on this device — transcript only
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </li>
               );
             })}
           </ul>
+
+          {activeTopic && (
+            <div className="rs-guide-body">
+              <p>{activeTopic.text}</p>
+              <div className="rs-guide-meta">
+                <span>{activeTopic.source}</span>
+                {supported ? (
+                  <button
+                    onClick={() =>
+                      playing === activeTopic.id ? cancelRef.current?.() : play(activeTopic)
+                    }
+                    className="rs-focus rs-guide-replay"
+                  >
+                    {playing === activeTopic.id ? "stop" : "play again"}
+                  </button>
+                ) : (
+                  <span style={{ color: "var(--text-faint)" }}>
+                    no speech voice on this device — transcript only
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
