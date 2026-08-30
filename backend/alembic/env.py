@@ -28,6 +28,18 @@ database_url = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg://ringsentinel:ringsentinel@db:5432/ringsentinel",
 )
+
+# Managed hosts (Neon, Render, Heroku) hand out `postgresql://` or
+# `postgres://`, which SQLAlchemy resolves to psycopg2 — a driver this project
+# does not install. The same normalisation runs in app/config.py, but Alembic
+# never loads Settings, so without this `alembic upgrade head` fails with
+# ModuleNotFoundError: psycopg2 while the app itself would have been fine.
+# entrypoint.sh runs migrations on every start, so this is the first thing a
+# deployment would have hit.
+from app.config import _normalise_database_url  # noqa: E402
+
+database_url = _normalise_database_url(database_url)
+
 config.set_main_option("sqlalchemy.url", database_url)
 
 target_metadata = Base.metadata
