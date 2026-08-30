@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { api, type ClusterDetail as Detail, type EvidencePack } from "@/lib/api";
 import { DURATION, EASE_OUT, prefersReducedMotion } from "@/lib/tokens";
+import { speak, speechSupported, stopSpeaking } from "@/lib/speech";
 import AuditTrail from "./AuditTrail";
 import GraphView from "./GraphView";
 import { ActionTag, CadenceTag, ScoreBar, SectionTitle, StatusTag } from "./Bits";
@@ -42,6 +43,15 @@ export default function ClusterDetail({
   const [packBusy, setPackBusy] = useState(false);
   const [packError, setPackError] = useState<string | null>(null);
 
+  // Reading the case file aloud speaks CLAUDE'S OWN WORDS — the summary, the
+  // confidence note and the key signals it wrote, in that order. Not a
+  // paraphrase and not a second model pass: the point of a spoken case file is
+  // that it is the same artefact the audit log records, just heard instead of
+  // read.
+  const [reading, setReading] = useState(false);
+  const speakable = typeof window !== "undefined" && speechSupported();
+  const cancelRead = useRef<(() => void) | null>(null);
+
   const { cluster, case_file, evidence, graph, audit_trail, counterfactual } = detail;
   const decided = cluster.status !== "pending";
 
@@ -66,7 +76,13 @@ export default function ClusterDetail({
 
   // Reset the form when a different cluster is opened, so a half-typed reason
   // can never be submitted against the wrong one.
+  // Stop any narration when the cluster changes or the pane unmounts. A voice
+  // still describing the previous cluster would be worse than no voice at all.
+  useEffect(() => () => stopSpeaking(), []);
+
   useEffect(() => {
+    cancelRead.current?.();
+    setReading(false);
     setIntent(null);
     setReason("");
     setError(null);
@@ -106,6 +122,26 @@ export default function ClusterDetail({
     }
   }
 
+  function toggleRead() {
+    if (reading) {
+      cancelRead.current?.();
+      return;
+    }
+    if (!case_file) return;
+    const script = [
+      case_file.summary,
+      case_file.confidence_note,
+      ...(case_file.key_signals ?? []),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    setReading(true);
+    cancelRead.current = speak(script, () => {
+      setReading(false);
+      cancelRead.current = null;
+    });
+  }
+
   const reasonTooShort = reason.trim().length < 5;
 
   return (
@@ -134,9 +170,20 @@ export default function ClusterDetail({
           step={1}
           right={
             case_file ? (
-              <span className="rs-mono" style={{ color: "var(--text-faint)" }}>
-                {case_file.model}
-                {case_file.stale && " · stale"}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.75rem" }}>
+                <span className="rs-mono" style={{ color: "var(--text-faint)" }}>
+                  {case_file.model}
+                  {case_file.stale && " · stale"}
+                </span>
+                {speakable && (
+                  <button
+                    onClick={toggleRead}
+                    className="rs-focus rs-guide-replay"
+                    title="Read Claude's case file aloud. These are its words, not a summary of them."
+                  >
+                    {reading ? "◼ stop" : "▶ read aloud"}
+                  </button>
+                )}
               </span>
             ) : undefined
           }

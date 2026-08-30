@@ -17,6 +17,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Loader from "@/components/landing/Loader";
+import VoiceGuide from "@/components/shared/VoiceGuide";
+import { LANDING_EXPLAINERS } from "@/lib/explainers";
 import CorpusPanel from "@/components/landing/CorpusPanel";
 import ThresholdScrubber, {
   FALLBACK_SCORES,
@@ -465,6 +467,8 @@ export default function Landing() {
           </div>
         </footer>
       </div>
+
+      {ready && <VoiceGuide topics={LANDING_EXPLAINERS} label="Why this?" />}
     </>
   );
 }

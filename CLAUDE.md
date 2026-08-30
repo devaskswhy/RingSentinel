@@ -1518,6 +1518,59 @@ frontend/
 
 ---
 
+## 5n. Spoken explanations
+
+A help card on both surfaces answering the questions people actually ask, read
+aloud. `lib/explainers.ts` holds the scripts, `lib/speech.ts` the synthesiser,
+`components/shared/VoiceGuide.tsx` the card.
+
+### ⚠️ Not a chatbot, deliberately
+
+A chat box on a fraud tool invites open-ended questions it would answer from a
+model with no grounding in this codebase, and the first confidently wrong
+answer about what the detector does would undo everything else the site is
+careful about. A fixed set of checked answers cannot hallucinate.
+
+### The two sources are labelled differently, and must stay that way
+
+| Where | Words written by | Label shown |
+|---|---|---|
+| The six help-card topics | us | "Written by the team · read by your browser" |
+| A cluster's "read aloud" | **Claude**, in the stored case file | its model name, beside the button |
+
+Reading the case file speaks Claude's own summary, confidence note and key
+signals in order — not a paraphrase, not a second model pass. It is the same
+artefact the audit log records, heard instead of read. Blurring that into a
+single "AI voice" label would be the one place this project claimed a model
+said something it did not.
+
+### Why the browser's synthesiser and not a hosted TTS
+
+No API key, no per-call cost, no network round trip that can fail mid-demo.
+`speechSynthesis` is in every current browser and starts instantly. The voice
+is less polished than ElevenLabs; that is the right trade for something that
+has to work on a laptop while someone is recording.
+
+Two quirks it works around, both real:
+- `getVoices()` returns empty on first call in Chrome — voices arrive later on
+  a `voiceschanged` event, so the list is primed on mount.
+- Chrome silently stops an utterance at roughly fifteen seconds, so text is
+  split into sentence-sized utterances and queued.
+
+### The transcript is never hidden behind the audio
+
+Someone on a silent laptop, someone deaf, and someone checking a number
+against the repo all need the words on screen. Speech is the addition, not the
+medium. Where no voice exists the card says so and shows the transcript alone.
+
+Every figure in the scripts was checked against the code before shipping — the
+weights against `detection/config.py` (0.45 / 0.25 / 0.15 / 0.15, address
+0.40), the thresholds against the detector (0.30 and 0.45), the sweep against
+§5b. A spoken claim is harder to fact-check than a written one, because a
+listener cannot scan back, so these are held to the page's standard.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -1603,6 +1656,7 @@ docker compose exec backend alembic upgrade head
 | **9** | Blind-spot measurement: 3 robustness cases, explanation-quality audit, `BLINDSPOTS.md` (§5k) | **Done** |
 | **11** | Monetization calculator + `MONETIZATION.md` (§5l) | **Done** |
 | **U0-U5** | UI pass: layout fix, palette, real-data hero canvas, console UX, threshold scrubber, ship polish (§5m) | **Done** |
+| **U6** | Spoken explanations: help card on both surfaces, case files read aloud (§5n) | **Done** |
 
 **Phase 1 constraints that were deliberately honoured:** no fake/mock data, no
 UI beyond a placeholder page, no detection logic. Do not "helpfully" add these
