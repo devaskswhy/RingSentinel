@@ -31,7 +31,7 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { ACCENT, prefersReducedMotion } from "@/lib/tokens";
+import { ACCENT, ACCENT_RGB, prefersReducedMotion } from "@/lib/tokens";
 
 export interface CorpusShape {
   totals: { transactions: number; entities: number; entity_links: number };
@@ -283,8 +283,8 @@ const TransactionField = forwardRef<FieldHandle, { corpus: CorpusShape }>(
             const x = hub.x * width;
             const y = hub.y * height;
             const glow = ctx.createRadialGradient(x, y, 0, x, y, 34);
-            glow.addColorStop(0, `rgba(45, 212, 191, ${0.20 * hubAlpha})`);
-            glow.addColorStop(1, "rgba(45, 212, 191, 0)");
+            glow.addColorStop(0, `rgba(${ACCENT_RGB}, ${0.2 * hubAlpha})`);
+            glow.addColorStop(1, `rgba(${ACCENT_RGB}, 0)`);
             ctx.fillStyle = glow;
             ctx.fillRect(x - 34, y - 34, 68, 68);
 

@@ -7,10 +7,11 @@
    --------------------------------------------------------------------------- */
 
 :root {
-  /* The product accent. See the three-colour rule immediately below. */
-  --accent: #2dd4bf;
-  --accent-dim: #14b8a6;
-  --accent-glow: rgba(45, 212, 191, 0.14);
+  /* Razorpay's brand blue - the platform this plugs into. See lib/tokens.ts
+     for why, and for the caveat about their Usage Agreement. */
+  --accent: #3395ff;
+  --accent-dim: #1a6fd4;
+  --accent-glow: rgba(51, 149, 255, 0.14);
 
   /* Three functional colours, each with exactly one meaning. This is the whole
      palette — everything else is the neutral ramp below.

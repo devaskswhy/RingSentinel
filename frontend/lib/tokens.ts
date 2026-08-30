@@ -20,9 +20,24 @@
  * one" while defining eleven hues fifty lines further down. Three colours that
  * each mean one thing is a rule that can actually be kept; one colour was a
  * rule that got quietly broken and left the claim standing.
+ *
+ * The accent is Razorpay's brand blue. The project is built for their
+ * buildathon, against their API, and would live inside their product — an
+ * accent borrowed from the platform it plugs into says that without a word of
+ * copy. It also retires a liability: the previous accent was #2dd4bf, and that
+ * specific teal-on-near-black is the most over-used palette in AI tooling,
+ * which was part of why the console read as generated.
+ *
+ * Taken from Razorpay's published brand blue rather than sampled from a
+ * screenshot. Their newsroom gates the official kit behind a Usage Agreement
+ * that is not itself published, so re-check this against the official
+ * guidelines before anything goes to print. A colour is not a trademark, but
+ * the number should still be right.
  */
-export const ACCENT = "#2dd4bf";
-export const ACCENT_DIM = "#14b8a6";
+export const ACCENT = "#3395ff";
+export const ACCENT_DIM = "#1a6fd4";
+/** Same colour as channel values, for canvas gradients that need alpha. */
+export const ACCENT_RGB = "51, 149, 255";
 export const DANGER = "#e5484d";
 export const INK = "#08090a";
 
@@ -119,7 +134,7 @@ export const ACTION_TAG = {
  * children's toy rather than an instrument.
  */
 export const NODE_COLORS = {
-  customer: "#2dd4bf",
+  customer: ACCENT,
   instrument: "#e8eaed",
   device: "#9aa1a8",
   address: "#656c73",
