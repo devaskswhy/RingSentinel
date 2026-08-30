@@ -117,16 +117,24 @@ def _event(row, order_id: str) -> dict:
     }
 
 
-def measure(db: Session, config: DetectorConfig | None = None) -> BlindspotReport:
+def measure(
+    db: Session,
+    config: DetectorConfig | None = None,
+    cases: list[RobustnessCase] | None = None,
+) -> BlindspotReport:
     """Insert the cases, run the detector, measure, and roll back.
 
     The caller keeps the session; this never commits. A rollback in `finally`
     guarantees the diagnostic leaves no trace even if scoring raises.
+
+    `cases` defaults to the three hand-written diagnostics. Passing a list runs
+    the same harness over cases from anywhere else - `scripts/adversarial_cases`
+    supplies ones designed by a model that never saw the detector's source.
     """
     from app.ingest import ingest_event
 
     config = config or DetectorConfig()
-    cases = build_all()
+    cases = cases if cases is not None else build_all()
     report = BlindspotReport(
         threshold=config.score_threshold,
         confident_threshold=config.confident_score_threshold,
