@@ -309,8 +309,30 @@ async def create_case_file(
     """Generate the case file, or return the cached one.
 
     Does not touch cluster status - Claude has no say in that.
+
+    Refuses on an instance with generation disabled. That is a licensing
+    boundary rather than a feature flag: the Agent SDK's terms do not permit
+    offering claude.ai login or rate limits to a product's users (CLAUDE.md
+    §5), so a hosted instance serving other people on the author's
+    subscription would be outside them. Case files already stored are still
+    returned in full - they are real Claude output, written locally.
     """
     _cluster_row(db, cluster_id)
+
+    from app.config import get_settings
+
+    if not get_settings().claude_generation_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Case-file generation is disabled on this instance. The Claude "
+                "Agent SDK may not serve a product's users on the author's "
+                "subscription, so this deployment reads the case files that "
+                "were generated locally rather than calling the model. Every "
+                "case file shown here is real, unedited Claude output."
+            ),
+        )
+
     try:
         outcome = await generate_case_file(db, cluster_id, force=force)
         db.commit()

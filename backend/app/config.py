@@ -39,6 +39,16 @@ class Settings(BaseSettings):
     #: can be revisited with data rather than opinion.
     claude_case_file_model: str | None = None
 
+    #: Whether this instance may CALL Claude to write new case files.
+    #:
+    #: Set false on any deployment reachable by people other than the operator.
+    #: The Agent SDK's terms do not permit offering claude.ai login or rate
+    #: limits to a product's users (CLAUDE.md §5), so a hosted RingSentinel
+    #: serving judges on the author's subscription would be outside them. Case
+    #: files already in the database are still served in full — they are real
+    #: Claude output, generated locally — only new generation is refused.
+    claude_generation_enabled: bool = True
+
     @property
     def razorpay_is_test_mode(self) -> bool:
         """Guard used by the ingest layer so a live key can never be used."""
