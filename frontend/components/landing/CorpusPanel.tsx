@@ -23,7 +23,7 @@ import { gsap } from "gsap";
 import type { CorpusShape } from "./TransactionField";
 import { DURATION, EASE, EASE_OUT } from "@/lib/tokens";
 
-const R = 62;
+const R = 60;
 const CIRC = 2 * Math.PI * R;
 const GAP = 1.4; // degrees of breathing room between ring segments
 
@@ -83,8 +83,8 @@ export default function CorpusPanel({ corpus }: { corpus: CorpusShape }) {
 
   return (
     <div ref={root} className="rs-corpus">
-      <div className="rs-label" style={{ marginBottom: "1.5rem" }}>
-        The seeded corpus · real Razorpay test-mode orders
+      <div className="rs-label" style={{ marginBottom: "1rem", fontSize: "0.68rem" }}>
+        Seeded corpus · real test-mode orders
       </div>
 
       <div className="rs-corpus-chart">
@@ -98,7 +98,7 @@ export default function CorpusPanel({ corpus }: { corpus: CorpusShape }) {
               r={R}
               fill="none"
               stroke="var(--line-strong)"
-              strokeWidth="13"
+              strokeWidth="11"
               strokeDasharray={`${normalFrac * CIRC} ${CIRC}`}
               strokeDashoffset="0"
             />
@@ -112,7 +112,7 @@ export default function CorpusPanel({ corpus }: { corpus: CorpusShape }) {
                 r={R}
                 fill="none"
                 stroke="var(--accent)"
-                strokeWidth="13"
+                strokeWidth="11"
                 strokeDasharray={`${Math.max(0, s.frac * CIRC - GAP)} ${CIRC}`}
                 strokeDashoffset={-(normalFrac + s.offset) * CIRC}
               >
@@ -144,7 +144,7 @@ export default function CorpusPanel({ corpus }: { corpus: CorpusShape }) {
           { k: "Rings found", v: `${ringCount} / ${ringCount}`, tone: true },
           { k: "False flags", v: "0", tone: true },
           { k: "Time to score the graph", v: "0.04s" },
-          { k: "Decisions made by a human", v: "100%" },
+          { k: "Decisions by a human", v: "100%" },
         ].map((r) => (
           <div key={r.k} className="rs-corpus-row">
             <span>{r.k}</span>
@@ -155,7 +155,7 @@ export default function CorpusPanel({ corpus }: { corpus: CorpusShape }) {
 
       <p className="rs-corpus-note">
         Measured on a synthetic corpus this project generated — separable by
-        construction, so this is not a claim about production accuracy.
+        construction, so not a production-accuracy claim.
       </p>
     </div>
   );
