@@ -5,6 +5,12 @@ Fraud-ring detection for the Razorpay buildathon (AI Risk Manager track).
 > **Working on this repo?** Read [CLAUDE.md](CLAUDE.md) first — it holds the
 > brief, the fixed tech stack, the schema, and the invariants.
 
+> **Defensive only.** No evasion guidance is produced anywhere in this
+> repository, and all traffic runs against a local test-mode instance only.
+> The synthetic and diagnostic generators exist to *trigger* detection so it
+> can be measured — never to defeat it — and nothing in this codebase can
+> block, freeze, or decline a customer. Every decision is made by a human.
+
 This README covers setup only. Feature documentation comes in a later phase.
 
 ---
@@ -132,6 +138,23 @@ curl localhost:8000/metrics
 Rings 9–12 were held out through all tuning and evaluated once. Re-running
 reproduces; changing a threshold in response to what it shows would turn them
 into a second tuning set, and there is no third.
+
+**8. Measure where it is weak**
+
+```bash
+# Rebuilds BLINDSPOTS.md from a live measurement
+docker compose exec -T backend python -m scripts.measure_blindspots \
+    --stdout > BLINDSPOTS.md
+
+# Proves the case-file grader can actually fail something
+docker compose exec backend python -m scripts.verify_explanation_grader
+```
+
+[BLINDSPOTS.md](BLINDSPOTS.md) runs three diagnostic cases built to sit where
+the scoring is weakest, and grades 15 generated case files for fabricated
+evidence and overclaiming. The cases are inserted through the real ingest path,
+measured, and rolled back — nothing persists, so the held-out numbers stay
+untouched and every stored transaction still traces to a real Razorpay order.
 
 **Verification scripts** — each proves an invariant rather than asserting it:
 

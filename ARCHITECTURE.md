@@ -99,6 +99,32 @@ docker compose exec backend python -m scripts.verify_resilience
 
 ---
 
+## Where it is weak
+
+[BLINDSPOTS.md](BLINDSPOTS.md) is generated from a live measurement, not
+written by hand. It runs three cases built to sit exactly where the scoring is
+weakest — a ring paced like people, a household that genuinely shares one
+address, and a ring spread thinly over two months — and grades 15 generated
+case files for fabricated evidence and overclaiming. The cases go in through
+the real ingest path and are rolled back, so nothing persists.
+
+The honest headline is that it came out better than predicted, which is
+reported with its limits attached: three cases cannot carry a percentage, and
+the cases share an author with the detector, so they probe the weaknesses we
+already knew about. The one real finding is that a ring paced like people
+clears the flag threshold but not the confidence threshold — found, but found
+weakly.
+
+Case files are graded mechanically rather than by a model, because a model
+auditing its own output shares its own blind spots. That grader is itself
+tested: `scripts/verify_explanation_grader.py` feeds it four known-bad case
+files and requires each to be caught by the criterion meant to catch it. That
+check earned its place — the tokeniser once shipped with its word boundaries
+corrupted into control characters, matched no digits at all, and passed a case
+file claiming 9,471 transactions while reporting a perfect score.
+
+---
+
 ## The evidence pack
 
 `GET /clusters/{id}/evidence-pack` returns one self-contained bundle for a

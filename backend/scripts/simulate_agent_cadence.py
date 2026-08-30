@@ -11,7 +11,7 @@ runs the detector so the cluster appears in the console while you watch.
 
 It exists to make one claim visible: a machine keeps time in a way a person
 cannot, and that regularity is itself a signal. Every order it sends is a
-legitimate test-mode API call against a local instance. Nothing here evades,
+legitimate test-mode API call against a local instance. Nothing here bypasses,
 degrades, or probes anything - the whole point is to be *caught*, promptly and
 visibly, by the detector running next to it.
 

@@ -70,13 +70,16 @@ Notes on the pins:
 RingSentinel/
 ├── CLAUDE.md              <- this file; read first
 ├── README.md              <- setup steps only
+├── ARCHITECTURE.md        <- system shape, failure table, positioning
+├── BLINDSPOTS.md          <- GENERATED. Do not hand-edit; see §5k
 ├── .env.example           <- every required variable, with provenance comments
 ├── docker-compose.yml     <- db + backend + frontend
 ├── backend/
 │   ├── entrypoint.sh          <- alembic upgrade head, then uvicorn
 │   ├── alembic/versions/      <- 0001 schema · 0002 evidence · 0003 case files
 │   │                             + status guard · 0004 fingerprint · 0005
-│   │                             evaluation_runs + triage guard
+│   │                             evaluation_runs + triage guard · 0006
+│   │                             case-file cost · 0007 audit hash chain
 │   ├── app/
 │   │   ├── config.py          <- pydantic-settings
 │   │   ├── db.py · models.py  <- engine/session · the ORM schema
@@ -86,6 +89,7 @@ RingSentinel/
 │   │   ├── webhooks.py        <- POST /webhooks/razorpay, HMAC verification
 │   │   ├── prompts.py         <- the explain-only system prompt
 │   │   ├── case_files.py      <- Claude Agent SDK integration
+│   │   ├── audit_chain.py     <- hash-chain verification, evidence-pack slice
 │   │   └── routers/
 │   │       ├── clusters.py    <- THE HUMAN GATE. Only writer of a decision.
 │   │       └── evaluation.py  <- /eval/scorecard and /metrics
@@ -96,7 +100,8 @@ RingSentinel/
 │   │   ├── archetypes.py      <- the six named archetype generators
 │   │   ├── normal.py          <- uncorrelated background traffic
 │   │   ├── planned.py         <- PlannedTransaction + Razorpay notes mapping
-│   │   └── plan.py            <- assembles the whole corpus
+│   │   ├── plan.py            <- assembles the whole corpus
+│   │   └── robustness_cases.py <- Phase 9 diagnostics; never persisted
 │   ├── detection/             <- MAY NOT READ LABELS. Enforced by AST check.
 │   │   ├── config.py          <- every threshold and weight, in one place
 │   │   ├── graph.py           <- entity_links -> NetworkX, hub filtering
@@ -104,21 +109,29 @@ RingSentinel/
 │   │   ├── baseline.py        <- label-free population timing baseline
 │   │   ├── cadence.py         <- human / agent / inconclusive
 │   │   ├── scoring.py         <- the four signals + evidence assembly
+│   │   ├── counterfactual.py  <- nearest-boundary sensitivity read
 │   │   └── pipeline.py        <- orchestration, fingerprint upsert, triage
 │   ├── evaluation/            <- MAY read labels. Never imported by detection/.
 │   │   ├── splits.py          <- tuning vs held-out; opaque exclusion sets
 │   │   ├── report.py          <- ring/cluster matching rules
 │   │   ├── metrics.py         <- precision, recall, exceptions, storage
-│   │   └── cost.py            <- false-positive cost model (all estimates)
+│   │   ├── cost.py            <- false-positive cost model (all estimates)
+│   │   ├── blindspots.py      <- robustness cases: insert, score, ROLL BACK
+│   │   └── explanation_quality.py  <- mechanical case-file grading
 │   └── scripts/
 │       ├── seed.py · seed_rings.py        <- schema check · the corpus seed
 │       ├── detect.py                      <- run the detector
 │       ├── generate_case_files.py         <- Claude case files
 │       ├── evaluate_detection.py          <- measure vs ground truth
 │       ├── report.py                      <- paste-ready evaluation summary
+│       ├── measure_blindspots.py          <- writes BLINDSPOTS.md (--stdout)
+│       ├── demo_reset.py                  <- 3 curated clusters for a take
+│       ├── simulate_agent_cadence.py      <- live 4.0s-interval demo
 │       ├── verify_ingest.py               <- ingest self-test, rolls back
 │       ├── verify_detector_isolation.py   <- proves invariant #4 (AST walk)
 │       ├── verify_human_gate.py           <- proves invariants #1/#2/#3
+│       ├── verify_resilience.py           <- breaks 6 things, names fallbacks
+│       ├── verify_explanation_grader.py   <- proves the grader can fail
 │       └── verify_claude_auth.py          <- Agent SDK auth check
 └── frontend/
     ├── lib/
@@ -899,6 +912,13 @@ curl localhost:8000/metrics                    # stored snapshot
 curl 'localhost:8000/metrics?recompute=true'   # fresh, unstored
 ```
 
+```bash
+# Phase 9 - blind spots. Cases are inserted, measured, and rolled back.
+docker compose exec -T backend python -m scripts.measure_blindspots \
+    --stdout > BLINDSPOTS.md
+docker compose exec backend python -m scripts.verify_explanation_grader
+```
+
 Snapshots are stored in `evaluation_runs` so a reported number cannot silently
 change because someone edited a threshold afterwards.
 
@@ -1203,6 +1223,108 @@ hook, and RingSentinel already meets the bar the draft describes.
 
 ---
 
+## 5k. Phase 9 — measuring the blind spots
+
+A clean number invites the suspicion that the test was easy, and the held-out
+result (4/4 rings, 0 false flags) is very clean. This phase exists to attack
+that suspicion with evidence rather than assurance: three cases built to sit
+exactly where the Phase 3 scoring is weakest, plus a mechanical audit of what
+Claude actually wrote in the case files.
+
+Output is [BLINDSPOTS.md](BLINDSPOTS.md), regenerated from a live measurement:
+
+```bash
+docker compose exec -T backend python -m scripts.measure_blindspots \
+    --stdout > BLINDSPOTS.md
+docker compose exec backend python -m scripts.verify_explanation_grader
+```
+
+### The three cases, and why they roll back
+
+`generator/robustness_cases.py` builds them; `evaluation/blindspots.py` inserts
+them **through the real ingest path**, runs the real detector, measures, and
+rolls back in a `finally`. Nothing persists. Two properties would otherwise be
+quietly damaged: every stored transaction traces to a real Razorpay order, and
+the held-out numbers must not be disturbed by diagnostic data.
+
+| Case | Targets | Should flag? | Result |
+|---|---|---|---|
+| Irregular-timing ring | timing signal contributes ~nothing | yes | flagged, **0.4196** → `needs_review` |
+| Innocent coincidence | is the 0.40 address weight low enough? | **no** | not flagged |
+| Low-density ring | does detection need a burst? | yes | flagged, **0.5884** → `pending` |
+
+### ⚠️ It came out better than predicted — do not oversell it
+
+The brief expected a drop and said to report whatever came out. **Nothing was
+tuned in response to these cases and nothing was retried.** Two limits belong
+next to the result every time it is quoted:
+
+- **The cases share an author with the detector.** They probe weaknesses we
+  already knew about, because those are the ones we could think of. The blind
+  spot that matters is by definition not on this list.
+- **Three cases cannot carry a percentage.** "100% recall" means two rings out
+  of two. Report it as a fraction.
+
+The one real finding: the irregular-timing ring cleared the flag threshold but
+**not** the confidence threshold. A ring paced like people is found, but found
+weakly — which agrees with the Phase 6 observation that human-cadence rings
+score 0.503 against 0.776 for agent-cadence ones. Two independent measurements
+landing on the same weakness is worth more than either passing alone.
+
+### Explanation quality — 15/15, graded mechanically
+
+Three criteria in `evaluation/explanation_quality.py`: **grounded** (every
+entity ref and number traces to the evidence), **calibrated** (no certainty
+language on a cluster inside the ambiguous band), **action fits** (suggested
+action consistent with the score bands).
+
+**Claude does not grade Claude.** A model auditing its own output shares its own
+blind spots, and a judge would rightly discount it.
+
+### ⚠️ A grader that matches nothing also reports 100%
+
+This is not hypothetical. The tokeniser shipped with its `\b` word boundaries
+replaced by literal **backspace bytes** (`0x08`) — a shell heredoc consumed the
+escape before Python ever saw it, *inside a raw string*, where it is invisible
+in every editor and in `Read`. The pattern became `\x08\d{1,6}\x08`, matched no
+digits at all, and a case file claiming **9,471 transactions** passed the
+grounding check cleanly. The pass rate did not reveal it.
+
+`scripts/verify_explanation_grader.py` exists because of that. It feeds the
+grader one honest case file and four broken ones — fabricated entity ref,
+fabricated count, certainty language on an ambiguous cluster, action
+contradicting the score — and requires each to be caught **by the criterion
+meant to catch it**, so one check cannot cover for another's failure. Run it
+before quoting any pass rate.
+
+Two honest limits, both reported in the document itself:
+- Integers below `FREE_NUMBER_CEILING = 32` are ordinary English ("two of the
+  four") and are not constrained. Measured reach: of **111** numbers asserted
+  across 15 case files, **31** were genuinely checked. Entity refs have no such
+  allowance.
+- Mechanical checks catch fabrication and miscalibration. They cannot tell
+  whether an explanation is *insightful*. This measures honesty, not quality.
+
+### Defensive-only, stated where it can be checked
+
+`grep -ri attack` and `grep -riE 'evade|evasion'` both return nothing across the
+repo — the one prior occurrence was a disclaimer in
+`scripts/simulate_agent_cadence.py`, reworded so a literal grep passes. The
+README carries the claim explicitly: no evasion guidance is produced anywhere
+here, all traffic is local test-mode only, and nothing in the codebase can
+block, freeze, or decline a customer.
+
+### ⚠️ Where BLINDSPOTS.md gets written
+
+Only `./backend` is mounted into the container, so the repo root is genuinely
+unreachable from there and no path arithmetic fixes it — an earlier version
+wrote to the container's ephemeral filesystem and produced nothing. The script
+now emits the document on **stdout** (`--stdout`, progress to stderr) so the
+host redirects it. This deliberately avoids mounting the repo root, which would
+expose `.env` and `.git` to the backend container for no reason.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -1281,6 +1403,12 @@ docker compose exec backend alembic upgrade head
 | **eval** | Held-out evaluation on rings 9-12, run once with the Phase 3 config: 4/4 rings, 0 false flags | **Done** |
 | **5** | Frontend: landing page (Lenis + GSAP scroll sequence) and review console (queue, case files, graph, scorecard, audit) | **Done** |
 | **6** | Honest scoring: held-out precision/recall, FP cost model, ambiguous band as `needs_review`, `/metrics`, `scripts/report.py` | **Done** |
+| **8** | Demo reset: three curated clusters with real case files, re-runnable between takes (§5g) | **Done** |
+| **10** | Live agent-cadence demonstration + polling console (§5h) | **Done** |
+| **13** | Resilience proof, counterfactual field, positioning in `ARCHITECTURE.md` (§5i) | **Done** |
+| **12** | Tamper-evident evidence pack: audit hash chain, schema-level verification (§5j) | **Done** |
+| **9** | Blind-spot measurement: 3 robustness cases, explanation-quality audit, `BLINDSPOTS.md` (§5k) | **Done** |
+| **11** | Monetization calculator + `MONETIZATION.md` | Not started — the one to cut if short on time |
 
 **Phase 1 constraints that were deliberately honoured:** no fake/mock data, no
 UI beyond a placeholder page, no detection logic. Do not "helpfully" add these
