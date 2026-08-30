@@ -176,10 +176,10 @@ export default function Landing() {
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
-            padding: "0 clamp(1.5rem, 6vw, 7rem)",
             position: "relative",
           }}
         >
+          <div className="rs-shell">
           <div className="rs-label" style={{ marginBottom: "1.75rem" }}>
             Razorpay buildathon · AI Risk Manager
           </div>
@@ -236,9 +236,11 @@ export default function Landing() {
             </a>
           </div>
 
+          </div>
+
           <div
-            className="rs-label"
-            style={{ position: "absolute", bottom: "2.5rem", left: "clamp(1.5rem, 6vw, 7rem)" }}
+            className="rs-shell rs-label"
+            style={{ position: "absolute", bottom: "2.5rem", left: 0, right: 0 }}
           >
             Scroll
           </div>
@@ -253,11 +255,17 @@ export default function Landing() {
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
-            padding: "0 clamp(1.5rem, 6vw, 7rem)",
             overflow: "hidden",
           }}
         >
-          <div style={{ position: "relative", minHeight: "8.5rem", maxWidth: "62ch" }}>
+          <div className="rs-shell rs-sequence-grid">
+          <div
+            style={{
+              position: "relative",
+              minHeight: "clamp(11rem, 24vh, 15rem)",
+              maxWidth: "62ch",
+            }}
+          >
             <Caption
               className="rs-cap-problem"
               step="01 — the problem"
@@ -279,8 +287,9 @@ export default function Landing() {
             />
           </div>
 
-          <div style={{ marginTop: "1.5rem" }}>
+          <div className="rs-graph-frame">
             <RingGraph />
+          </div>
           </div>
         </section>
 
@@ -292,10 +301,11 @@ export default function Landing() {
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
-            padding: "6rem clamp(1.5rem, 6vw, 7rem)",
+            padding: "6rem 0",
             borderTop: "1px solid var(--line)",
           }}
         >
+          <div className="rs-shell">
           <div className="rs-gate-item rs-anim rs-label" style={{ marginBottom: "1.5rem" }}>
             04 — the gate
           </div>
@@ -370,6 +380,7 @@ export default function Landing() {
               </div>
             ))}
           </div>
+          </div>
         </section>
 
         {/* ---- CTA ----------------------------------------------------- */}
@@ -380,7 +391,7 @@ export default function Landing() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "6rem clamp(1.5rem, 6vw, 7rem)",
+            padding: "6rem var(--shell-pad)",
             borderTop: "1px solid var(--line)",
             textAlign: "center",
           }}
@@ -408,18 +419,19 @@ export default function Landing() {
           </div>
         </section>
 
-        <footer
-          style={{
-            padding: "2rem clamp(1.5rem, 6vw, 7rem)",
-            borderTop: "1px solid var(--line)",
-            display: "flex",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: "1rem",
-          }}
-        >
-          <span className="rs-label">RingSentinel</span>
-          <span className="rs-label">Razorpay test mode · nothing auto-blocks</span>
+        <footer style={{ padding: "2rem 0", borderTop: "1px solid var(--line)" }}>
+          <div
+            className="rs-shell"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "1rem",
+            }}
+          >
+            <span className="rs-label">RingSentinel</span>
+            <span className="rs-label">Razorpay test mode · nothing auto-blocks</span>
+          </div>
         </footer>
       </div>
     </>
@@ -478,36 +490,38 @@ function Nav() {
         left: 0,
         right: 0,
         zIndex: 50,
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "1.25rem clamp(1.5rem, 6vw, 7rem)",
+        padding: "1.25rem 0",
         backdropFilter: "blur(12px)",
         background: "rgba(8,9,10,0.6)",
         borderBottom: "1px solid var(--line)",
       }}
     >
-      <span
-        style={{
-          fontFamily: "var(--font-display)",
-          fontWeight: 600,
-          letterSpacing: "-0.02em",
-        }}
+      <div
+        className="rs-shell"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
       >
-        Ring<span style={{ color: "var(--accent)" }}>Sentinel</span>
-      </span>
-      <Link
-        href="/console"
-        className="rs-focus"
-        style={{
-          color: "var(--text-muted)",
-          textDecoration: "none",
-          fontSize: "var(--step--1)",
-          transition: `color var(--dur-fast) var(--ease)`,
-        }}
-      >
-        Console →
-      </Link>
+        <span
+          style={{
+            fontFamily: "var(--font-display)",
+            fontWeight: 600,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Ring<span style={{ color: "var(--accent)" }}>Sentinel</span>
+        </span>
+        <Link
+          href="/console"
+          className="rs-focus"
+          style={{
+            color: "var(--text-muted)",
+            textDecoration: "none",
+            fontSize: "var(--step--1)",
+            transition: `color var(--dur-fast) var(--ease)`,
+          }}
+        >
+          Console →
+        </Link>
+      </div>
     </nav>
   );
 }
