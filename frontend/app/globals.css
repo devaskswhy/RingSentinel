@@ -1182,3 +1182,35 @@ h1, h2, h3, h4 {
   color: var(--text-faint);
   max-width: 74ch;
 }
+
+/* ---------------------------------------------------------------------------
+   The honest section. Deliberately set apart: it is the one part of the pitch
+   that reports failure, and burying it in the same rhythm as the wins would be
+   a way of hiding it.
+   --------------------------------------------------------------------------- */
+.rs-honest {
+  margin-top: 5rem;
+  padding: clamp(2rem, 4vw, 3rem);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--signal);
+  background: var(--ink-raised);
+}
+
+.rs-honest-head {
+  font-size: clamp(1.5rem, 2.8vw, 2.2rem);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  margin: 0 0 1.5rem;
+  max-width: 24ch;
+}
+
+.rs-honest-body {
+  margin: 0 0 1.1rem;
+  max-width: 72ch;
+  color: var(--text-muted);
+  font-size: var(--step-0);
+  line-height: 1.65;
+}
+.rs-honest-body:last-child { margin-bottom: 0; color: var(--text-faint); }
+.rs-honest-body strong { color: var(--text); font-weight: 600; }
+.rs-honest-body em { color: var(--accent); font-style: normal; }

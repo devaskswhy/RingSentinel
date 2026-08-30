@@ -158,6 +158,39 @@ export default function WhyUs() {
           weakest. The cost ratio assumes 400 input tokens per transaction for the
           comparison; every other number is observed.
         </p>
+
+        {/* The strongest thing this project can say is not a result. It is that
+            it went looking for its own failures on data it did not create, and
+            published what it found. */}
+        <div className="rs-why-anim rs-honest">
+          <div className="rs-label" style={{ marginBottom: "1.25rem" }}>
+            And then we tested it on data we did not make
+          </div>
+          <h3 className="rs-honest-head">
+            590,540 real transactions. It flagged 99% of them.
+          </h3>
+          <p className="rs-honest-body">
+            Run against the IEEE-CIS fraud dataset, the threshold calibrated on
+            our own corpus admitted almost everything and separated nothing —
+            lift 1.02× against a 3.50% base rate. The score still <em>ranked</em>
+            real fraud risk at <strong>1.62× in its top decile</strong>; what did
+            not survive was the absolute cut, because real payment data compresses
+            the score range. Selecting by review capacity instead recovers
+            <strong> 1.43×</strong>.
+          </p>
+          <p className="rs-honest-body">
+            We then asked Claude — which has never seen the detector&apos;s source —
+            to design cases against its published description. It found five. The
+            detector handled <strong>none of them</strong>: three rings missed, and
+            two innocent cases, a family and a campus kiosk cohort, wrongly
+            flagged.
+          </p>
+          <p className="rs-honest-body">
+            Both results are in the repository with the code that produced them.
+            A detector that has only ever been measured on data its authors built
+            has not been measured.
+          </p>
+        </div>
       </div>
     </section>
   );

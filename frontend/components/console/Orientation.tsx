@@ -37,9 +37,9 @@ const GATE_INDEX = 4;
 /** One line each. If it needs a paragraph it does not belong here. */
 const CLAIMS = [
   { label: "What others miss", line: "Coordination lives between transactions, not inside one." },
-  { label: "What we do", line: "Every score breaks into four named parts you can argue with." },
+  { label: "What we do", line: "Four named signals. Ablation shows each one earns its weight on real data." },
   { label: "What we never do", line: "Nothing here can block anyone. A database trigger enforces it." },
-  { label: "What's next", line: "Rings cross merchants. Salted tokens let us see across them." },
+  { label: "What we got wrong", line: "On 590k real transactions it flagged 99%. That is in the repo too." },
 ];
 
 export default function Orientation() {
