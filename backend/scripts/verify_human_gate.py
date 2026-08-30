@@ -8,9 +8,14 @@ Checks:
   1. Only app/routers/clusters.py contains SQL that updates clusters.status.
   2. Only that module sets the `ringsentinel.human_review` guard.
   3. Nothing anywhere calls a block/freeze/decline-style action.
-  4. Runtime: a status UPDATE without the guard is refused by the database.
-  5. Runtime: audit_log still rejects UPDATE and DELETE.
-  6. Runtime: the case-file writer is given no tools.
+  4.  Runtime: a status UPDATE without the guard is refused by the database.
+  4b. Runtime: a recorded decision cannot be revised, even by a human.
+  4c. Runtime: a decision without a written reason is refused by the SCHEMA.
+  4d. Schema: every guarding trigger is present, and the detector view still
+      omits the ground-truth column.
+  4e. Runtime: the audit log's hash chain verifies end to end.
+  5.  Runtime: audit_log still rejects UPDATE and DELETE.
+  6.  Runtime: the case-file writer is given no tools.
 
 Run:  docker compose exec backend python -m scripts.verify_human_gate
 """
@@ -24,6 +29,7 @@ import sys
 
 from sqlalchemy import text
 
+from app.audit_chain import verify_chain
 from app.db import SessionLocal
 
 OK = "[ok]"
@@ -216,6 +222,85 @@ def main() -> int:  # noqa: C901
             except Exception:
                 savepoint.rollback()
                 print(f"   {OK} refused, even inside a human review transaction")
+
+        print("\n4c. A decision requires a written reason - enforced by the schema:")
+        undecided = db.execute(
+            text(
+                "SELECT id FROM clusters WHERE status IN "
+                "('pending','needs_review') LIMIT 1"
+            )
+        ).first()
+        if undecided is None:
+            print(f"   {OK} (no undecided cluster to test against)")
+        else:
+            savepoint = db.begin_nested()
+            try:
+                # Human review declared, but no reason supplied. Before migration
+                # 0007 this succeeded and the reason was an application-layer
+                # promise; the database now refuses it outright.
+                db.execute(
+                    text("SELECT set_config('ringsentinel.human_review','on',true)")
+                )
+                db.execute(
+                    text(
+                        "UPDATE clusters SET status = 'cleared'::cluster_status "
+                        "WHERE id = :cid"
+                    ),
+                    {"cid": str(undecided[0])},
+                )
+                savepoint.rollback()
+                print(f"   {FAIL} a decision was accepted with no written reason")
+                problems.append("decision permitted without a reason")
+            except Exception:
+                savepoint.rollback()
+                print(f"   {OK} refused - the reason requirement lives in the "
+                      f"trigger, not only in Pydantic")
+
+        print("\n4d. The schema layer itself, inspected directly:")
+        expected_triggers = {
+            "trg_clusters_status_human_only": "clusters",
+            "trg_audit_log_no_update_delete": "audit_log",
+            "trg_audit_log_no_truncate": "audit_log",
+            "trg_audit_log_chain": "audit_log",
+        }
+        present = {
+            row[0]: row[1]
+            for row in db.execute(
+                text(
+                    "SELECT t.tgname, c.relname FROM pg_trigger t "
+                    "JOIN pg_class c ON c.oid = t.tgrelid WHERE NOT t.tgisinternal"
+                )
+            ).all()
+        }
+        for name, table in expected_triggers.items():
+            if present.get(name) == table:
+                print(f"   {OK} {name} on {table}")
+            else:
+                print(f"   {FAIL} {name} is MISSING from {table}")
+                problems.append(f"trigger {name} missing")
+
+        detector_columns = {
+            r[0]
+            for r in db.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'v_transactions_detector'"
+                )
+            ).all()
+        }
+        if not detector_columns or "is_synthetic_ring_id" in detector_columns:
+            print(f"   {FAIL} v_transactions_detector is missing or leaks the label")
+            problems.append("detector view compromised")
+        else:
+            print(f"   {OK} v_transactions_detector exists and omits the label column")
+
+        print("\n4e. Audit log hash chain:")
+        chain = verify_chain(db)
+        if chain.intact:
+            print(f"   {OK} {chain.summary()}")
+        else:
+            print(f"   {FAIL} {chain.summary()}")
+            problems.append(f"audit chain broken at row {chain.first_broken_id}")
 
         print("\n5. audit_log remains append-only:")
         row = db.execute(text("SELECT id FROM audit_log ORDER BY id DESC LIMIT 1")).first()

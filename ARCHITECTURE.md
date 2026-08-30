@@ -99,6 +99,40 @@ docker compose exec backend python -m scripts.verify_resilience
 
 ---
 
+## The evidence pack
+
+`GET /clusters/{id}/evidence-pack` returns one self-contained bundle for a
+decided cluster: the evidence and its per-signal breakdown, Claude's
+explanation, the human's written reason, and the slice of the audit chain that
+proves those rows have not been altered since.
+
+Every `audit_log` row stores `sha256(previous row's hash || this row)`. The
+append-only trigger *blocks* tampering; the chain makes it *detectable* — even
+against someone who drops the trigger first, because they cannot make every
+subsequent hash still add up.
+
+`scripts/verify_human_gate.py` is the thing to hand someone who wants to check
+rather than be told. It inspects the schema directly — every guarding trigger,
+the label-free detector view, the chain end to end — and exits non-zero the
+moment one is broken. Both failure modes were tested by actually breaking them:
+rewriting an audit row was caught as *"the row's contents no longer hash to its
+recorded hash"*, and dropping the guard trigger was caught as a missing trigger.
+
+A note on wording: the bundle carries a `bundle_digest`, which is a **checksum,
+not a signature**. It detects corruption in transit and proves nothing about
+origin, because there is no key. The chain is the integrity guarantee.
+
+This maps onto what RBI's 2026 draft *Guidance on Regulatory Principles for
+Model Risk Management* asks for — human oversight of automated decisions,
+reviewers able to genuinely challenge rather than rubber-stamp, and disclosed
+reasoning for models that would otherwise be black boxes. That guidance is a
+**draft**, **non-binding**, and its scope covers banks, NBFCs and payments banks
+rather than payment aggregators, so it does not bind Razorpay. Many of
+Razorpay's own merchants would be directly on the hook for it, and this is
+plainly the direction the regulation is heading.
+
+---
+
 ## How it could make money
 
 Case files are generated per **cluster**, not per transaction. The seeded corpus

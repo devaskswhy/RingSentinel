@@ -330,6 +330,12 @@ class AuditLog(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
+    # Tamper-evidence (migration 0007). row_hash = sha256(prev_hash || row).
+    # The append-only trigger blocks tampering; the chain makes it detectable
+    # even against someone who drops the trigger first.
+    row_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prev_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     __table_args__ = (
         Index("ix_audit_log_target", "target_type", "target_id"),
         Index("ix_audit_log_created_at", "created_at"),

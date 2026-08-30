@@ -143,6 +143,15 @@ docker compose exec backend python -m scripts.verify_claude_auth         # auth 
 docker compose exec backend python -m scripts.verify_resilience          # 6 failure modes
 ```
 
+`verify_human_gate` is the one to hand someone who wants to check rather than be
+told: it inspects the schema directly — every guarding trigger, the label-free
+detector view, and the audit log's hash chain — and exits non-zero the moment
+one is broken. Any decided cluster's full bundle:
+
+```bash
+curl localhost:8000/clusters/<id>/evidence-pack
+```
+
 Architecture, the AI-judgment split, and the failure-handling table are in
 [ARCHITECTURE.md](ARCHITECTURE.md).
 

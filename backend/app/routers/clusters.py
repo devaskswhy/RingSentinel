@@ -21,7 +21,10 @@ anywhere in this codebase (invariant #1).
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
@@ -29,6 +32,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.audit_chain import chain_slice, verify_chain
 from app.case_files import CaseFileError, generate_case_file
 from app.db import get_db
 from app.models import AuditActor, AuditLog, ClusterStatus
@@ -353,7 +357,18 @@ def _record_review(
     # Declare this transaction a human review action. The Postgres trigger
     # refuses the UPDATE below without it. Transaction-local (third arg true),
     # so it cannot leak into any other statement.
-    db.execute(text("SELECT set_config('ringsentinel.human_review', 'on', true)"))
+    # Both settings are transaction-local (third argument true), so neither can
+    # leak into another statement. The reason is passed to the database rather
+    # than merely validated here: since migration 0007 the trigger refuses a
+    # decision without one, so "no status changes without a written reason" is
+    # answerable from the schema instead of from a code review.
+    db.execute(
+        text(
+            "SELECT set_config('ringsentinel.human_review', 'on', true), "
+            "       set_config('ringsentinel.review_reason', :reason, true)"
+        ),
+        {"reason": body.reason},
+    )
 
     db.execute(
         text("UPDATE clusters SET status = CAST(:s AS cluster_status) WHERE id = :cid"),
@@ -412,3 +427,150 @@ def dismiss_cluster(
 ) -> dict:
     """A human rejects the flag as a false positive."""
     return _record_review(db, cluster_id, "dismiss", body)
+
+
+@router.get("/{cluster_id}/evidence-pack")
+def evidence_pack(cluster_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    """One self-contained bundle for a cluster: what was decided, and by whom.
+
+    Everything a reader needs to reconstruct the decision without access to this
+    system - the evidence and its per-signal breakdown, Claude's explanation,
+    the human's written reason, and the slice of the audit chain that proves
+    those rows have not been altered since.
+
+    On the integrity claim, precisely
+    ---------------------------------
+    `chain_intact` is the real guarantee. Each audit row hashes its own contents
+    together with the previous row's hash, so altering, deleting, or reordering
+    any row breaks every link after it. That holds even against someone with raw
+    database access who drops the triggers first - they cannot make the
+    arithmetic add up again.
+
+    `bundle_digest` is a checksum of this response, not a signature. It detects
+    corruption in transit; it proves nothing about origin, because there is no
+    key. Calling it "signed" would overstate it.
+    """
+    cluster = _cluster_row(db, cluster_id)
+
+    case_file = db.execute(
+        text(
+            """
+            SELECT id, summary, confidence_note,
+                   suggested_action::text AS suggested_action,
+                   key_signals, caveats, model, prompt_version,
+                   cluster_score_at_generation, generated_at, cost_usd
+            FROM case_files WHERE cluster_id = :cid
+            ORDER BY generated_at DESC LIMIT 1
+            """
+        ),
+        {"cid": str(cluster_id)},
+    ).mappings().first()
+
+    trail = chain_slice(db, "cluster", str(cluster_id))
+    decision = next(
+        (
+            row
+            for row in reversed(trail)
+            if row["action"] in ("cluster_approved", "cluster_dismissed")
+        ),
+        None,
+    )
+    chain = verify_chain(db)
+
+    accounts = db.execute(
+        text(
+            """
+            SELECT e.type::text AS type, e.external_ref
+            FROM cluster_members m
+            JOIN entities e ON e.id = m.entity_id
+            WHERE m.cluster_id = :cid
+            ORDER BY e.type, e.external_ref
+            """
+        ),
+        {"cid": str(cluster_id)},
+    ).mappings().all()
+
+    bundle: dict[str, Any] = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "cluster": {
+            "id": str(cluster["id"]),
+            "status": cluster["status"],
+            "score": cluster["score"],
+            "cadence": cluster["cadence"],
+            "detector_version": cluster["detector_version"],
+            "flagged_at": cluster["created_at"].isoformat(),
+        },
+        "evidence": cluster["evidence_json"],
+        "members": [
+            {"type": a["type"], "external_ref": a["external_ref"]} for a in accounts
+        ],
+        "explanation": (
+            {
+                **{
+                    k: (str(v) if isinstance(v, uuid.UUID) else v)
+                    for k, v in dict(case_file).items()
+                    if k != "generated_at"
+                },
+                "generated_at": case_file["generated_at"].isoformat(),
+                "authority": (
+                    "Written by Claude. Advisory only - it has no tool that "
+                    "could change this cluster's status, and never did."
+                ),
+            }
+            if case_file
+            else None
+        ),
+        "decision": (
+            {
+                "action": decision["action"],
+                "actor": decision["actor"],
+                "at": decision["at"],
+                "reviewer": decision["detail"].get("reviewer"),
+                "reason": decision["detail"].get("reason"),
+                "previous_status": decision["detail"].get("previous_status"),
+                "new_status": decision["detail"].get("new_status"),
+            }
+            if decision
+            else {
+                "action": None,
+                "note": "No decision recorded yet - this cluster is still awaiting review.",
+            }
+        ),
+        "audit_trail": trail,
+        "integrity": {
+            "chain_intact": chain.intact,
+            "rows_verified": chain.rows_checked,
+            "summary": chain.summary(),
+            "how_it_works": (
+                "Each audit row stores sha256(previous row's hash || this row's "
+                "contents). Altering, deleting, or reordering any row breaks "
+                "every link after it, including for someone with raw database "
+                "access who drops the triggers first."
+            ),
+        },
+        "guarantees": [
+            "No code path in this system can block, freeze, or restrict a "
+            "customer account; none exists to call.",
+            "A cluster's status can only reach a decided state inside a human "
+            "review action carrying a written reason - enforced by a Postgres "
+            "trigger, not by application code.",
+            "A recorded decision is never revised; the trigger refuses it even "
+            "inside a human review action.",
+            "The detector reads a view with the ground-truth column removed, so "
+            "it cannot see the labels it is scored against.",
+        ],
+    }
+
+    # Checksum last, over everything above it.
+    canonical = json.dumps(bundle, sort_keys=True, separators=(",", ":"), default=str)
+    bundle["bundle_digest"] = {
+        "algorithm": "sha256",
+        "value": hashlib.sha256(canonical.encode()).hexdigest(),
+        "covers": "every field above this one",
+        "note": (
+            "A checksum, not a signature: it detects corruption in transit and "
+            "proves nothing about origin. The audit chain above is the integrity "
+            "guarantee."
+        ),
+    }
+    return bundle

@@ -1133,6 +1133,76 @@ margin below it for a confident one. Both cases fire on real data.
 
 ---
 
+## 5j. The evidence pack — provable, not just true
+
+The append-only trigger *blocks* tampering. A hash chain makes tampering
+*detectable*, which is the stronger claim: someone with raw database access can
+drop a trigger and rewrite a row, but they cannot make the arithmetic add up
+afterwards.
+
+Migration `0007` adds `row_hash = sha256(prev_hash || row)` to every `audit_log`
+row, backfilled across all existing rows and maintained by a BEFORE INSERT
+trigger. Inserts take a transaction-scoped advisory lock so two concurrent
+writes cannot fork the chain.
+
+### The reason moved into the database
+
+Until now, "a decision requires a written reason" was enforced by Pydantic —
+real, but an application-layer promise. The endpoint now passes the reason to
+Postgres via `ringsentinel.review_reason`, and the status guard refuses a
+terminal transition without at least five characters of it.
+
+Nothing behavioural changed; the endpoints already demanded a reason. What
+changed is that the question *"can anything set a status without a recorded
+reason?"* is now answerable from the schema instead of from a code review.
+
+### Verified by breaking it
+
+`scripts/verify_human_gate.py` gained checks 4c (reason enforced by schema),
+4d (every guarding trigger present, detector view still label-free), and
+4e (chain verifies end to end). Both tamper tests were run for real:
+
+| Tamper | Result |
+|---|---|
+| Disabled the append-only trigger, rewrote a decided row's `reason` | `chain broken at row 1632 of 1847: the row's contents no longer hash to its recorded hash — it was altered after it was written`, **exit 1** |
+| Dropped `trg_clusters_status_human_only` | four named problems including `trigger missing`, **exit 1** |
+
+### Two things the tamper tests exposed
+
+**The append-only trigger blocked its own migration.** The backfill needed
+`UPDATE`, which the trigger correctly refused. It is now stood down for the
+backfill and re-armed inside the same transaction, so there is no window where
+the log is unprotected.
+
+**Migration 0007 could not restore what it guarded.** It replaced the guard
+*function* but assumed the *trigger* from 0003 existed — so after the trigger
+was dropped, re-running the migration silently restored nothing. Now uses
+`CREATE OR REPLACE TRIGGER`, so the migration can rebuild the guarantee rather
+than assume it.
+
+### `GET /clusters/{id}/evidence-pack`
+
+One bundle: the cluster, its four named signals, the accounts and attributes,
+Claude's explanation with its model and measured cost, the human's decision and
+written reason, the chained audit rows, and a chain-verification result.
+
+On the integrity language, precisely: `chain_intact` is the real guarantee.
+`bundle_digest` is a **checksum, not a signature** — it detects corruption in
+transit and proves nothing about origin, because there is no key. Calling it
+signed would overstate it.
+
+### ⚠️ On the regulatory framing
+
+RBI's draft *Guidance on Regulatory Principles for Model Risk Management, 2026*
+(comments closed 24 July 2026) is a **draft** and **non-binding**, and its scope
+list covers banks, NBFCs and payments banks — **not payment aggregators**.
+Razorpay is an aggregator. Do not claim Razorpay is bound by it. See §5f for the
+verified detail. The honest claim: this is the direction Indian financial AI
+regulation is moving, many of Razorpay's own merchants would be directly on the
+hook, and RingSentinel already meets the bar the draft describes.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -1170,6 +1240,10 @@ docker compose exec backend python -m scripts.simulate_agent_cadence
 
 # Prove the failure handling - six scenarios, all rolled back
 docker compose exec backend python -m scripts.verify_resilience
+
+# Hand this to a judge: exits non-zero the moment a guarantee is broken
+docker compose exec backend python -m scripts.verify_human_gate
+curl localhost:8000/clusters/<id>/evidence-pack
 
 # Phase 4 - case files and review
 docker compose exec backend python -m scripts.verify_claude_auth
