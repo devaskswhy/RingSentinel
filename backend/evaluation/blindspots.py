@@ -153,15 +153,31 @@ def measure(
         )
 
         # Map each case's accounts to the cluster that captured most of them.
+        #
+        # Looked up BY REFERENCE, not by a naming pattern. This was a
+        # LIKE '%_robust_%' filter, which silently matched nothing the moment
+        # cases came from anywhere else — `scripts/adversarial_cases` names its
+        # entities `_adv_`. Every case then reported "not flagged" with 0 of 0
+        # accounts matched, so a lookup failure was indistinguishable from a
+        # detector failure, and the run appeared to find three blind spots that
+        # had never been tested. A matcher that cannot find its own subjects
+        # must not be allowed to report a result, so it now raises instead.
+        wanted_refs = sorted({r for case in cases for r in case.customer_refs})
         ref_to_id = {
             row.external_ref: row.id
             for row in db.execute(
                 text(
                     "SELECT id, external_ref FROM entities "
-                    "WHERE external_ref LIKE '%\\_robust\\_%'"
-                )
+                    "WHERE external_ref = ANY(:refs)"
+                ),
+                {"refs": wanted_refs},
             )
         }
+        if wanted_refs and not ref_to_id:
+            raise RuntimeError(
+                f"none of the {len(wanted_refs)} case accounts were found after "
+                "ingest — refusing to report outcomes from an empty match"
+            )
 
         for case in cases:
             wanted = {
