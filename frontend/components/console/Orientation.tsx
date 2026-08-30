@@ -106,7 +106,7 @@ export default function Orientation() {
                   one transaction at a time.
                 </h2>
                 <p className="rs-orient-sub">
-                  So this scores the cluster, never the payment — and hands every
+                  So this scores the cluster, never the transaction — and hands every
                   one to a human.
                 </p>
               </div>

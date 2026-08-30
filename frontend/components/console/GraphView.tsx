@@ -228,7 +228,7 @@ export default function GraphView({
         anchor: "start",
         lines: [
           `ONE LINE = ONE ACCOUNT'S TRANSACTIONS THROUGH IT`,
-          `thickest here is ${heavy.weight} — a single payment proves nothing, the repetition does`,
+          `thickest here is ${heavy.weight} — a single transaction proves nothing, the repetition does`,
         ],
       });
     }

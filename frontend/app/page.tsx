@@ -310,7 +310,7 @@ export default function Landing() {
               className="rs-cap-verdict"
               step="03 — the flag"
               title="That convergence is the whole signal."
-              body={`${ringCount} rings, ${ringAccounts} accounts, funnelling through the attributes they share. RingSentinel scores the cluster, not the payment, and hands every one of them to a human.`}
+              body={`${ringCount} rings, ${ringAccounts} accounts, funnelling through the attributes they share. RingSentinel scores the cluster, not the transaction, and hands every one of them to a human.`}
             />
           </div>
 

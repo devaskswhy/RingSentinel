@@ -22,14 +22,14 @@ import { gsap } from "gsap";
 import { DURATION, EASE_OUT, prefersReducedMotion } from "@/lib/tokens";
 
 const LACKS = [
-  "Scores each payment on its own",
+  "Scores each transaction on its own",
   "Sees only its own slice of the network",
   "Returns a number you cannot interrogate",
   "Acts automatically, then explains later",
 ];
 
 const INSTEAD = [
-  "Scores the cluster, never the payment",
+  "Scores the cluster, never the transaction",
   "Groups accounts by device, address and card",
   "Four named signals, with the entities behind each",
   "Flags and waits. A human decides, every time",
@@ -78,13 +78,13 @@ export default function WhyUs() {
         </div>
 
         <h2 className="rs-why-anim rs-why-head">
-          A ring is not a bad payment.
+          A ring is not a bad transaction.
           <br />
           <span style={{ color: "var(--accent)" }}>It is a shape between them.</span>
         </h2>
 
         <p className="rs-why-anim rs-why-sub">
-          Which is why a model that looks at one payment at a time cannot find
+          Which is why a model that looks at one transaction at a time cannot find
           one — not because it is a weak model, but because the evidence is not
           inside the thing it is looking at.
         </p>
@@ -121,7 +121,7 @@ export default function WhyUs() {
           </div>
 
           <div className="rs-cost-row">
-            <span className="rs-cost-name">One model call per payment</span>
+            <span className="rs-cost-name">One model call per transaction</span>
             <span className="rs-cost-bar"><span style={{ width: "100%" }} data-tone="lack" /></span>
             <span className="rs-cost-val">$160.00</span>
           </div>
@@ -134,7 +134,7 @@ export default function WhyUs() {
           </div>
 
           <p className="rs-why-note">
-            Case files are written per flagged cluster, not per payment, and
+            Case files are written per flagged cluster, not per transaction, and
             detection makes no model calls at all. The second bar is drawn at a
             visible minimum — to scale it would be a third of a pixel.
           </p>
@@ -155,7 +155,7 @@ export default function WhyUs() {
           Detection figures are measured on a synthetic corpus this project
           generated and are not a claim about production accuracy — the corpus is
           separable by construction, and BLINDSPOTS.md says where the detector is
-          weakest. The cost ratio assumes 400 input tokens per payment for the
+          weakest. The cost ratio assumes 400 input tokens per transaction for the
           comparison; every other number is observed.
         </p>
       </div>
