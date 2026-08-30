@@ -19,8 +19,7 @@
 
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
-import { DURATION, EASE_OUT } from "@/lib/tokens";
-import { ScrollTrigger } from "@/lib/smoothScroll";
+import { DURATION, EASE_OUT, prefersReducedMotion } from "@/lib/tokens";
 
 const LACKS = [
   "Scores each payment on its own",
@@ -48,6 +47,9 @@ export default function WhyUs() {
 
   useEffect(() => {
     if (!root.current) return;
+    // GSAP writes inline styles, so the CSS reduced-motion rule does not
+    // reach it. The guard has to be here.
+    if (prefersReducedMotion()) return;
     const ctx = gsap.context(() => {
       gsap.from(".rs-why-anim", {
         opacity: 0,
@@ -58,10 +60,10 @@ export default function WhyUs() {
         scrollTrigger: { trigger: root.current, start: "top 72%" },
       });
     }, root);
-    return () => {
-      ctx.revert();
-      ScrollTrigger.refresh();
-    };
+    // ctx.revert() kills these triggers on its own. Calling
+    // ScrollTrigger.refresh() here as well forced a full layout recalculation
+    // of every remaining trigger on the page for no benefit.
+    return () => ctx.revert();
   }, []);
 
   return (

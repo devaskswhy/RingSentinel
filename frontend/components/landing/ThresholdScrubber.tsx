@@ -21,8 +21,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { gsap } from "gsap";
-import { DURATION, EASE_OUT } from "@/lib/tokens";
-import { ScrollTrigger } from "@/lib/smoothScroll";
+import { DURATION, EASE_OUT, prefersReducedMotion } from "@/lib/tokens";
 
 const MIN = 0.3;
 const MAX = 0.6;
@@ -67,6 +66,9 @@ export default function ThresholdScrubber({ scores }: { scores: number[] }) {
 
   useEffect(() => {
     if (!root.current) return;
+    // GSAP writes inline styles, so the CSS reduced-motion rule does not
+    // reach it. The guard has to be here.
+    if (prefersReducedMotion()) return;
     const ctx = gsap.context(() => {
       gsap.from(".rs-thr-anim", {
         opacity: 0,
@@ -77,10 +79,10 @@ export default function ThresholdScrubber({ scores }: { scores: number[] }) {
         scrollTrigger: { trigger: root.current, start: "top 75%" },
       });
     }, root);
-    return () => {
-      ctx.revert();
-      ScrollTrigger.refresh();
-    };
+    // ctx.revert() kills these triggers on its own. Calling
+    // ScrollTrigger.refresh() here as well forced a full layout recalculation
+    // of every remaining trigger on the page for no benefit.
+    return () => ctx.revert();
   }, []);
 
   return (

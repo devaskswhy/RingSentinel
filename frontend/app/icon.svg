@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The product mark: accounts converging on one shared attribute. The same
+       idea the landing field animates and the console diagram draws, at 32px. -->
+  <rect width="32" height="32" fill="#08090a"/>
+  <g stroke="#3395ff" stroke-width="1.1" opacity="0.55">
+    <line x1="16" y1="16" x2="16" y2="6"/>
+    <line x1="16" y1="16" x2="24.7" y2="11"/>
+    <line x1="16" y1="16" x2="24.7" y2="21"/>
+    <line x1="16" y1="16" x2="16" y2="26"/>
+    <line x1="16" y1="16" x2="7.3" y2="21"/>
+    <line x1="16" y1="16" x2="7.3" y2="11"/>
+  </g>
+  <g fill="#3395ff">
+    <circle cx="16" cy="6" r="2.4"/>
+    <circle cx="24.7" cy="11" r="2.4"/>
+    <circle cx="24.7" cy="21" r="2.4"/>
+    <circle cx="16" cy="26" r="2.4"/>
+    <circle cx="7.3" cy="21" r="2.4"/>
+    <circle cx="7.3" cy="11" r="2.4"/>
+  </g>
+  <!-- the shared attribute at the centre -->
+  <rect x="12.9" y="12.9" width="6.2" height="6.2" fill="#e8eaed" transform="rotate(45 16 16)"/>
+</svg>

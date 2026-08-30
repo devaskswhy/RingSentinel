@@ -12,7 +12,7 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import type { AuditEntry } from "@/lib/api";
-import { DURATION, EASE_OUT, STAGGER } from "@/lib/tokens";
+import { DURATION, EASE_OUT, STAGGER, prefersReducedMotion } from "@/lib/tokens";
 
 /**
  * Actors on the luminance ramp, not on three hues.
@@ -57,6 +57,9 @@ export default function AuditTrail({ entries }: { entries: AuditEntry[] }) {
 
   useEffect(() => {
     if (!root.current) return;
+    // GSAP writes inline styles, so the CSS reduced-motion rule does not
+    // reach it. The guard has to be here.
+    if (prefersReducedMotion()) return;
     const ctx = gsap.context(() => {
       gsap.from(".rs-audit-row", {
         opacity: 0,

@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
-import { DURATION, EASE_OUT, STAGGER } from "@/lib/tokens";
+import { DURATION, EASE_OUT, STAGGER, prefersReducedMotion } from "@/lib/tokens";
 import ThesisDiagram from "./ThesisDiagram";
 
 const STORAGE_KEY = "ringsentinel.orientation.collapsed";
@@ -58,6 +58,9 @@ export default function Orientation() {
 
   useEffect(() => {
     if (collapsed || !root.current) return;
+    // GSAP writes inline styles, so the CSS reduced-motion rule does not
+    // reach it. The guard has to be here.
+    if (prefersReducedMotion()) return;
     const ctx = gsap.context(() => {
       gsap.from(".rs-orient-item", {
         opacity: 0,

@@ -31,7 +31,12 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { ACCENT, ACCENT_RGB, prefersReducedMotion } from "@/lib/tokens";
+import {
+  ACCENT,
+  ACCENT_RGB,
+  MOBILE_BREAKPOINT,
+  prefersReducedMotion,
+} from "@/lib/tokens";
 
 export interface CorpusShape {
   totals: { transactions: number; entities: number; entity_links: number };
@@ -103,7 +108,7 @@ type Hub = { x: number; y: number; accounts: { x: number; y: number }[]; ring: n
  * Positions are computed in a unit square and scaled at draw time, so a resize
  * never re-randomises the layout — it only re-scales it.
  */
-function buildLayout(corpus: CorpusShape) {
+function buildLayout(corpus: CorpusShape, density = 1) {
   const rand = mulberry32(0x5eed);
   const dots: Dot[] = [];
   const hubs: Hub[] = [];
@@ -131,7 +136,8 @@ function buildLayout(corpus: CorpusShape) {
     });
     hubs.push({ x: cx, y: cy, accounts, ring: index });
 
-    for (let t = 0; t < ring.transactions; t++) {
+    const ringDots = Math.max(ring.accounts, Math.round(ring.transactions * density));
+    for (let t = 0; t < ringDots; t++) {
       const account = accounts[t % ring.accounts];
       const angle = rand() * Math.PI * 2;
       const radius = (0.008 + rand() * 0.012) * (1 + (t % 3) * 0.15);
@@ -149,7 +155,8 @@ function buildLayout(corpus: CorpusShape) {
 
   // Background traffic: scattered, and it stays scattered. These are the
   // transactions a per-transaction model would clear, correctly, one at a time.
-  for (let i = 0; i < corpus.normal_transactions; i++) {
+  const normalDots = Math.round(corpus.normal_transactions * density);
+  for (let i = 0; i < normalDots; i++) {
     const x = rand();
     const y = rand();
     dots.push({ sx: x, sy: y, tx: x, ty: y, ring: -1, drift: rand() * Math.PI * 2, delay: 0 });
@@ -163,7 +170,12 @@ const TransactionField = forwardRef<FieldHandle, { corpus: CorpusShape }>(
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const progress = useRef(0);
     const pointer = useRef({ x: -999, y: -999 });
-    const layout = useMemo(() => buildLayout(corpus), [corpus]);
+    // Drawn at full density on anything desktop-sized. Below that the dot count
+    // is halved: the shape of the argument is identical and a mid-range phone
+    // does not spend a frame budget it does not have.
+    const density =
+      typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT ? 0.5 : 1;
+    const layout = useMemo(() => buildLayout(corpus, density), [corpus, density]);
 
     useImperativeHandle(ref, () => ({
       setProgress: (p: number) => {
@@ -183,6 +195,9 @@ const TransactionField = forwardRef<FieldHandle, { corpus: CorpusShape }>(
       let height = 0;
       let raf = 0;
       let start = performance.now();
+      // Drift time is held across pauses so the field does not jump when it
+      // scrolls back into view.
+      let elapsedHeld = 0;
 
       const resize = () => {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -318,9 +333,26 @@ const TransactionField = forwardRef<FieldHandle, { corpus: CorpusShape }>(
       observer.observe(parent);
       resize();
 
+      // The field animates only while it is on screen. Without this the RAF
+      // loop ran for the entire session — through the whole rest of the page,
+      // and in a background tab on some browsers — for a canvas nobody could
+      // see. This is the single largest performance win on the page.
+      const visibility = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting && !raf) {
+            start = performance.now() - elapsedHeld;
+            raf = requestAnimationFrame(loop);
+          } else if (!entry.isIntersecting && raf) {
+            elapsedHeld = performance.now() - start;
+            cancelAnimationFrame(raf);
+            raf = 0;
+          }
+        },
+        { rootMargin: "200px" },
+      );
+
       if (!reduced) {
-        start = performance.now();
-        raf = requestAnimationFrame(loop);
+        visibility.observe(parent);
         parent.addEventListener("pointermove", onPointer);
         parent.addEventListener("pointerleave", onLeave);
       }
@@ -328,6 +360,7 @@ const TransactionField = forwardRef<FieldHandle, { corpus: CorpusShape }>(
       return () => {
         cancelAnimationFrame(raf);
         observer.disconnect();
+        visibility.disconnect();
         parent.removeEventListener("pointermove", onPointer);
         parent.removeEventListener("pointerleave", onLeave);
       };

@@ -21,7 +21,7 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import type { CorpusShape } from "./TransactionField";
-import { DURATION, EASE, EASE_OUT } from "@/lib/tokens";
+import { DURATION, EASE, EASE_OUT, prefersReducedMotion } from "@/lib/tokens";
 
 const R = 60;
 const CIRC = 2 * Math.PI * R;
@@ -47,6 +47,16 @@ export default function CorpusPanel({ corpus }: { corpus: CorpusShape }) {
 
   useEffect(() => {
     if (!root.current) return;
+
+    // GSAP writes inline styles, so the CSS reduced-motion rule never reaches
+    // it. Skipping the tweens is not enough here: the total is *written* by the
+    // counter, so it has to be set directly or the panel reads "0" forever.
+    if (prefersReducedMotion()) {
+      const el = root.current.querySelector(".rs-corpus-total");
+      if (el) el.textContent = total.toLocaleString();
+      return;
+    }
+
     const ctx = gsap.context(() => {
       // Arcs draw themselves in; stroke-dashoffset is one of the three
       // properties this project allows to animate.
