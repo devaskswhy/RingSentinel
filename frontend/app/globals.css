@@ -1154,66 +1154,28 @@ h1, h2, h3, h4 {
 @media print { .rs-guide { display: none; } }
 
 /* ---------------------------------------------------------------------------
-   Graph key — what the shapes are actually saying.
+   Graph callouts.
 
-   The graph on its own showed circles, diamonds and a tooltip, and left the
-   reader to infer the rest. This states it: how many accounts, what they
-   converge on, and how much traffic went through each link.
+   The force layout converges in the middle and leaves wide empty margins. The
+   labels live there, tied to the node they describe by a leader line, instead
+   of in a paragraph below the diagram that the reader has to map back onto it.
    --------------------------------------------------------------------------- */
-.rs-graph-key {
-  margin-top: 1.25rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--line);
-}
-
-.rs-graph-read {
-  margin: 0 0 1.1rem;
-  font-size: var(--console-body);
-  line-height: 1.6;
-  color: var(--text-muted);
-  max-width: 74ch;
-}
-.rs-graph-read b { color: var(--text); font-weight: 600; }
-
-.rs-graph-attrs {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 1px;
-  background: var(--line);
-  border: 1px solid var(--line);
-}
-.rs-graph-attrs li {
-  display: flex;
-  align-items: baseline;
-  gap: 0.9rem;
-  flex-wrap: wrap;
-  background: var(--ink);
-  padding: 0.7rem 0.9rem;
-  font-size: var(--console-small);
-}
-.rs-graph-attr-type {
+.rs-anno-k {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--accent);
-  min-width: 6.5rem;
+  font-size: 8.5px;
+  letter-spacing: 0.09em;
+  fill: var(--accent);
 }
-.rs-graph-attrs code {
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-.rs-graph-attr-n {
-  margin-left: auto;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.rs-anno-v {
+  font-family: var(--font-body);
+  font-size: 10px;
+  fill: var(--text-muted);
 }
 
 .rs-graph-note {
-  margin: 1rem 0 0;
+  margin: 1.1rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
   font-size: var(--console-small);
   line-height: 1.55;
   color: var(--text-faint);

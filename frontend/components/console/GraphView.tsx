@@ -137,6 +137,93 @@ export default function GraphView({
 
   const maxWeight = Math.max(1, ...edges.map((e) => e.weight));
 
+  /**
+   * Callouts, drawn into the margin the force layout leaves empty.
+   *
+   * The graph converges tightly in the middle and left a great deal of dead
+   * space around it, while the explanation of what the shapes meant sat in a
+   * paragraph underneath. Putting the labels on the thing they describe uses
+   * that space and removes the lookup entirely.
+   *
+   * Every figure is derived from the graph itself: an attribute's account count
+   * is its degree, and its transaction count is the sum of its edge weights.
+   */
+  const annotations = (() => {
+    const attrs = placed
+      .filter((p) => p.node.type !== "customer")
+      .map((p) => ({
+        p,
+        accounts: edges.filter((e) => e.source === p.id || e.target === p.id).length,
+        txns: edges
+          .filter((e) => e.source === p.id || e.target === p.id)
+          .reduce((n, e) => n + e.weight, 0),
+      }))
+      .sort((a, b) => b.txns - a.txns);
+
+    const out: {
+      key: string;
+      x: number;
+      y: number;
+      tx: number;
+      ty: number;
+      anchor: "start" | "end";
+      lines: string[];
+    }[] = [];
+
+    // The busiest shared attribute, labelled on the right.
+    const top = attrs[0];
+    if (top) {
+      out.push({
+        key: "attr",
+        x: top.p.x,
+        y: top.p.y,
+        tx: W - 8,
+        ty: 34,
+        anchor: "end",
+        lines: [
+          `${top.p.node.type.toUpperCase()} SHARED BY ${top.accounts} ACCOUNTS`,
+          `${top.txns} transactions ran through it`,
+        ],
+      });
+    }
+
+    // One account, labelled on the left.
+    const account =
+      [...placed].filter((p) => p.node.type === "customer").sort((a, b) => a.x - b.x)[0];
+    if (account) {
+      out.push({
+        key: "account",
+        x: account.x,
+        y: account.y,
+        tx: 8,
+        ty: 34,
+        anchor: "start",
+        lines: ["ONE ACCOUNT", "unremarkable on its own"],
+      });
+    }
+
+    // The heaviest edge, labelled at the bottom — this is where "one
+    // transaction" gets its meaning.
+    const heavy = [...edges].sort((a, b) => b.weight - a.weight)[0];
+    const ha = heavy && byId.get(heavy.source);
+    const hb = heavy && byId.get(heavy.target);
+    if (heavy && ha && hb) {
+      out.push({
+        key: "edge",
+        x: (ha.x + hb.x) / 2,
+        y: (ha.y + hb.y) / 2,
+        tx: 8,
+        ty: H - 26,
+        anchor: "start",
+        lines: [
+          `ONE LINE = ONE ACCOUNT'S TRANSACTIONS THROUGH IT`,
+          `thickest here is ${heavy.weight} — a single payment proves nothing, the repetition does`,
+        ],
+      });
+    }
+    return out;
+  })();
+
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
@@ -200,6 +287,34 @@ export default function GraphView({
               </g>
             );
           })}
+        </g>
+        <g className="rs-graph-anno">
+          {annotations.map((a) => (
+            <g key={a.key}>
+              <line
+                x1={a.tx + (a.anchor === "start" ? 2 : -2)}
+                y1={a.ty + 4}
+                x2={a.x}
+                y2={a.y}
+                stroke="var(--text-faint)"
+                strokeWidth="1"
+                strokeDasharray="2 3"
+                opacity="0.75"
+              />
+              <circle cx={a.x} cy={a.y} r="3" fill="var(--text)" opacity="0.9" />
+              {a.lines.map((line, i) => (
+                <text
+                  key={i}
+                  x={a.tx}
+                  y={a.ty + i * 13}
+                  textAnchor={a.anchor}
+                  className={i === 0 ? "rs-anno-k" : "rs-anno-v"}
+                >
+                  {line}
+                </text>
+              ))}
+            </g>
+          ))}
         </g>
       </svg>
 

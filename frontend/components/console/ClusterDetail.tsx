@@ -410,41 +410,11 @@ export default function ClusterDetail({
         <div style={panel}>
           <GraphView nodes={graph.nodes} edges={graph.edges} />
 
-          {/* The graph alone showed shapes and a tooltip. What a reviewer needs
-              is the sentence the shapes are making: how many accounts, what
-              they converge on, and how much traffic ran through each one. */}
-          <div className="rs-graph-key">
-            <p className="rs-graph-read">
-              <b>{evidence.size} accounts</b> — the blue circles — converge on{" "}
-              <b>
-                {(evidence.shared_attributes ?? []).length} shared{" "}
-                {(evidence.shared_attributes ?? []).length === 1
-                  ? "attribute"
-                  : "attributes"}
-              </b>
-              , the grey diamonds. Any one account using a card is unremarkable.
-              This many arriving at the same one is the signal.
-            </p>
-
-            <ul className="rs-graph-attrs">
-              {(evidence.shared_attributes ?? []).map((a) => (
-                <li key={a.entity_id}>
-                  <span className="rs-graph-attr-type">{a.attribute_type}</span>
-                  <code className="rs-mono">{a.external_ref}</code>
-                  <span className="rs-graph-attr-n">
-                    {a.customer_count} accounts · {a.observations} transactions
-                  </span>
-                </li>
-              ))}
-            </ul>
-
-            <p className="rs-graph-note">
-              A grey diamond is a device, card, or address more than one account
-              used. Edge thickness is how many transactions ran through that
-              link. Attribute references are salted tokens — never a real card
-              number or address.
-            </p>
-          </div>
+          <p className="rs-graph-note">
+            Grey diamonds are attributes more than one account used — a device,
+            a card, a delivery address. References are salted tokens, never a
+            real card number or address.
+          </p>
         </div>
       </div>
 
