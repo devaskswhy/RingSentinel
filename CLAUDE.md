@@ -1568,9 +1568,13 @@ an English script read by a foreign voice. Pointing `speechSynthesis` at
 English text with `lang="hi-IN"` produces phonetic nonsense, which is worse
 than offering English alone. Arabic transcripts render `dir="rtl"`.
 
-**Only languages the device has a voice for are listed.** `availableLangs()`
-filters against `getVoices()`, because offering one the browser cannot
-pronounce plays silence or reads in the wrong accent.
+⚠️ **All eight are listed; the ones with no installed voice are marked "text
+only".** Filtering them out was the first attempt and it was wrong — a stock
+Windows install ships English and little else, so eight translations collapsed
+to one entry and the feature looked broken. The translated text stands on its
+own: someone can read Hindi they cannot hear. What the card will not do is
+read Hindi text with an English voice, which produces phonetic nonsense — it
+shows the transcript and says why it is silent.
 
 ⚠️ **Claude's case files are never translated.** The per-cluster answers are
 marked `englishOnly` and always spoken by an English voice, whatever the

@@ -10,9 +10,13 @@
  * undo everything the rest of the site is careful about. A fixed set of checked
  * answers cannot hallucinate.
  *
- * Only languages this device has a voice for are offered. Listing a language
- * the browser cannot pronounce would either play silence or read the text in
- * the wrong accent, and both are worse than not offering it.
+ * All eight languages are listed, and the ones this device has no voice for are
+ * marked "text only" rather than hidden. Hiding them was the first attempt and
+ * it was wrong: a stock Windows install ships English and little else, so eight
+ * translations collapsed to a single entry and the feature looked broken. The
+ * translated text stands on its own — someone can read Hindi they cannot hear.
+ * What it will not do is read Hindi text with an English voice, which produces
+ * phonetic nonsense.
  *
  * The transcript is always on screen. Someone on a silent laptop, someone deaf,
  * and someone checking a figure against the repo all need the words; speech is
@@ -70,21 +74,23 @@ export default function VoiceGuide({
     return () => stopSpeaking();
   }, []);
 
-  // Only offer what the device can actually pronounce. `ready` re-runs this
-  // once Chrome delivers its voice list, which is empty on first call.
-  const offered = useMemo(() => {
-    if (!supported) return LANGUAGES.slice(0, 1);
-    const have = availableLangs(LANGUAGES.map((l) => l.code));
-    const list = LANGUAGES.filter((l) => have.has(l.code));
-    return list.length ? list : LANGUAGES.slice(0, 1);
+  /**
+   * Every language is listed, and the ones this device cannot speak are
+   * marked rather than hidden.
+   *
+   * Hiding them was wrong: a stock Windows install ships English voices and
+   * little else, so eight translations collapsed to one entry and the feature
+   * looked broken. The translated text is useful on its own — someone can read
+   * Hindi they cannot hear — so the selector offers all eight and says which
+   * will play silently.
+   */
+  const spokenLangs = useMemo(() => {
+    if (!supported) return new Set<string>();
+    return availableLangs(LANGUAGES.map((l) => l.code));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supported, ready]);
 
-  // If the stored language has no voice on this machine, fall back rather than
-  // leaving a selection that plays nothing.
-  useEffect(() => {
-    if (offered.length && !offered.some((l) => l.code === lang)) setLang(offered[0].code);
-  }, [offered, lang]);
+  const hasVoice = spokenLangs.has(lang);
 
   useEffect(() => {
     if (!open) {
@@ -101,6 +107,12 @@ export default function VoiceGuide({
       // Untranslated content is always spoken by an English voice — a Hindi
       // voice reading English words produces phonetic nonsense.
       const spokenLang = t.englishOnly ? "en" : inLang;
+      // No installed voice for this language: show the transcript, say nothing.
+      // Falling back to an English voice reading Hindi would be worse.
+      if (!spokenLangs.has(spokenLang)) {
+        setPlaying(null);
+        return;
+      }
       const bcp47 =
         LANGUAGES.find((l) => l.code === spokenLang)?.bcp47 ?? "en-US";
       setPlaying(t.id);
@@ -113,7 +125,7 @@ export default function VoiceGuide({
         { rate: atRate, lang: bcp47 },
       );
     },
-    [rate, lang],
+    [rate, lang, spokenLangs],
   );
 
   const groups = [
@@ -178,9 +190,10 @@ export default function VoiceGuide({
                 onChange={(e) => changeLang(e.target.value as LangCode)}
                 aria-label="Language"
               >
-                {offered.map((l) => (
+                {LANGUAGES.map((l) => (
                   <option key={l.code} value={l.code}>
                     {l.label}
+                    {spokenLangs.has(l.code) ? "" : " · text only"}
                   </option>
                 ))}
               </select>
@@ -242,7 +255,7 @@ export default function VoiceGuide({
                     ? "Claude's case file · English only"
                     : "Written by the team · read by your browser"}
                 </span>
-                {supported ? (
+                {supported && (activeTopic.englishOnly ? spokenLangs.has("en") : hasVoice) ? (
                   <button
                     onClick={() =>
                       playing === activeTopic.id
@@ -254,8 +267,8 @@ export default function VoiceGuide({
                     {playing === activeTopic.id ? "stop" : "play again"}
                   </button>
                 ) : (
-                  <span style={{ color: "var(--text-faint)" }}>
-                    no speech voice here — transcript only
+                  <span style={{ color: "var(--signal)" }}>
+                    no voice installed for this language — transcript only
                   </span>
                 )}
               </div>
