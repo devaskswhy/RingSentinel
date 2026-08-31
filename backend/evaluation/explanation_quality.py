@@ -118,7 +118,7 @@ class QualityReport:
 
 
 def _numbers_in(body: str) -> set[int]:
-    """Integers a case file asserts structurally, ignoring money and dates.
+    r"""Integers a case file asserts structurally, ignoring money and dates.
 
     Comma grouping has to be handled before tokenising. A naive \b\d{1,4}\b
     scan reads "3,328-8,608 INR, median 6,128" as the numbers 3, 328, 8, 608
@@ -129,9 +129,32 @@ def _numbers_in(body: str) -> set[int]:
     """
     # Join comma-grouped digits so they tokenise as one number.
     cleaned = re.sub(r"(?<=\d),(?=\d{2,3}\b)", "", body)
+    # THE CURRENCY TOKENS NEED LETTER BOUNDARIES, and the reason is not
+    # obvious. `Rs\.?` under re.I with no boundary matches the "rs" INSIDE an
+    # ordinary word, so "the cluster covers 9471 transactions" parsed as "cove"
+    # plus a rupee amount of 9471, and the number was stripped before
+    # tokenising. Every figure preceded by a word ending in "rs" - covers,
+    # clusters, orders, numbers, users, members - silently disappeared from the
+    # grounding check. Same failure as the 0x08 corruption: a fabricated number
+    # passes because nothing ever looked at it. Caught by tests/test_regressions.
+    #
+    # Lookarounds are used rather than word-boundary escapes, because the
+    # rupee sign is not a word character: a boundary escape placed before
+    # it would fail to match against a leading space.
+    #
     # Currency, prefix and suffix forms.
-    cleaned = re.sub(r"(?:INR|Rs\.?|₹)\s*[\d,]+(?:\.\d+)?", " ", cleaned, flags=re.I)
-    cleaned = re.sub(r"[\d,]+(?:\.\d+)?\s*(?:INR|Rs\.?|₹)", " ", cleaned, flags=re.I)
+    cleaned = re.sub(
+        r"(?:(?<![A-Za-z])(?:INR|Rs)\.?|₹)\s*[\d,]+(?:\.\d+)?",
+        " ",
+        cleaned,
+        flags=re.I,
+    )
+    cleaned = re.sub(
+        r"[\d,]+(?:\.\d+)?\s*(?:(?:INR|Rs)\.?(?![A-Za-z])|₹)",
+        " ",
+        cleaned,
+        flags=re.I,
+    )
     # Ranges of amounts: "3328-8608"
     cleaned = re.sub(r"\b\d{4,}\s*[-–]\s*\d{4,}\b", " ", cleaned)
     cleaned = re.sub(r"\d+(?:\.\d+)?\s*%", " ", cleaned)

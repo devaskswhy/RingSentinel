@@ -76,13 +76,22 @@ SKIP_DIRS = {"__pycache__", ".venv", "alembic"}
 #: order to prove the database refuses it, and rolls back either way. Exempting
 #: it explicitly is honest; the alternative is a verifier that cannot test the
 #: thing it exists to test.
+#: `backend/tests/` is exempt for the same reason: `test_invariants.py` asserts
+#: this very property, which means it must contain the string it scans for. A
+#: test that names the guard is not a code path that sets it. The exemption is
+#: by directory rather than by filename so a new test file cannot silently
+#: reintroduce the false positive - and the tests are not production code, so
+#: nothing under them can reach the database at review time.
 SELF_EXEMPT = {"scripts/verify_human_gate.py"}
+EXEMPT_DIRS = {"tests"}
 
 
 def python_files() -> list[pathlib.Path]:
     out = []
     for path in BACKEND.rglob("*.py"):
         if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        if any(part in EXEMPT_DIRS for part in path.parts):
             continue
         out.append(path)
     return sorted(out)

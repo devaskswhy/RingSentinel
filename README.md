@@ -426,11 +426,14 @@ docker compose exec backend python -m scripts.detect
 docker compose exec backend python -m scripts.generate_case_files
 docker compose exec backend python -m scripts.report --split holdout
 
-# the proofs
+# the proofs — each breaks something for real, then rolls it back
 docker compose exec backend python -m scripts.verify_human_gate
 docker compose exec backend python -m scripts.verify_detector_isolation
 docker compose exec backend python -m scripts.verify_resilience
 docker compose exec backend python -m scripts.verify_explanation_grader
+
+# the unit tests — pure, no database, no network, no model calls
+docker compose exec backend python -m pytest
 
 # the measurements that made this honest
 docker compose exec backend python -m scripts.compare_baselines
@@ -439,6 +442,39 @@ docker compose exec backend python -m scripts.evaluate_ieee --limit 0
 docker compose exec backend python -m scripts.adversarial_cases
 docker compose exec backend python -m scripts.monetization --merchants 50 --transactions 2000
 ```
+
+### How this project is checked
+
+Two layers, and the split is deliberate.
+
+| | What it covers | How |
+|---|---|---|
+| `scripts/verify_*.py` | The guarantees — the human gate, the append-only log, the detector's isolation from labels, the failure handling | Breaks each one **for real** against a live database, then rolls back. Exits non-zero the moment a guarantee fails |
+| `backend/tests/` | The arithmetic, the parsing, and every bug that shipped once | Pure unit tests. No database, no network, no model calls |
+
+The verifiers are the stronger evidence and they came first: a trigger that
+refuses an unguarded `UPDATE` is proven by attempting one, not by mocking it.
+The unit tests cover what the verifiers structurally cannot, and they run in
+milliseconds, so a regression surfaces on the commit that introduces it.
+
+**They already earned their place.** Writing the tokeniser tests exposed a live
+bug in the case-file grader: `Rs\.?` ran case-insensitively with no letter
+boundary, so the `rs` inside `cove**rs** 9471` was read as a rupee amount and
+the number was stripped before the grounding check ever saw it. Every figure
+preceded by a word ending in *rs* — covers, clusters, orders, numbers, users,
+members — silently vanished. Same failure class as the `0x08` corruption in
+§5k, and the same reason it hid: **a checker that matches nothing reports
+100%.** That is now the fourth time this project has been bitten by that exact
+shape, so it has its own test.
+
+**What it did not change, stated so the finding is not oversold.** The bug fired
+four times across the 15 stored case files, but the only figure it swallowed was
+a `12` — below the 32 free-number ceiling, so unconstrained either way. The
+reported explanation-quality result is **unchanged at 15/15, with 31 of 111
+asserted numbers genuinely constrained**. What the bug would have hidden is a
+fabricated *large* count in a sentence like "the cluster covers 9,471
+transactions". None of the fifteen contained one. It was a live defect with no
+measurable effect here, and both halves of that belong in the same sentence.
 
 ---
 

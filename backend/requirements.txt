@@ -22,3 +22,8 @@ requests==2.34.2
 
 # LLM case files (Phase 4) - authenticated via Claude subscription OAuth, not an API key
 claude-agent-sdk==0.2.144
+
+# Unit tests (backend/tests). Pure: no database, no network, no model calls -
+# the properties needing those are proven by scripts/verify_*.py against a live
+# database instead.
+pytest==8.4.2

@@ -111,6 +111,9 @@ RingSentinel/
 │   │   ├── cadence.py         <- human / agent / inconclusive
 │   │   ├── scoring.py         <- the four signals + evidence assembly
 │   │   ├── counterfactual.py  <- nearest-boundary sensitivity read
+│   │   ├── linkage.py         <- BUILT, MEASURED, SHIPPED OFF. See §5o
+│   │   ├── population.py      <- refuted hypothesis, flag off. See §5o
+│   │   ├── thresholds.py      <- absolute | percentile | budget selection
 │   │   └── pipeline.py        <- orchestration, fingerprint upsert, triage
 │   ├── evaluation/            <- MAY read labels. Never imported by detection/.
 │   │   ├── splits.py          <- tuning vs held-out; opaque exclusion sets
@@ -118,7 +121,11 @@ RingSentinel/
 │   │   ├── metrics.py         <- precision, recall, exceptions, storage
 │   │   ├── cost.py            <- false-positive cost model (all estimates)
 │   │   ├── blindspots.py      <- robustness cases: insert, score, ROLL BACK
-│   │   └── explanation_quality.py  <- mechanical case-file grading
+│   │   ├── explanation_quality.py  <- mechanical case-file grading
+│   │   ├── ieee.py            <- the detector on 524,834 real transactions
+│   │   ├── baselines.py       <- is the scorer worth four signals?
+│   │   ├── ablation.py        <- does each signal earn its weight?
+│   │   └── adversarial.py     <- cases designed by a model that didn't build it
 │   └── scripts/
 │       ├── seed.py · seed_rings.py        <- schema check · the corpus seed
 │       ├── detect.py                      <- run the detector
@@ -127,6 +134,10 @@ RingSentinel/
 │       ├── report.py                      <- paste-ready evaluation summary
 │       ├── measure_blindspots.py          <- writes BLINDSPOTS.md (--stdout)
 │       ├── monetization.py                <- cost/exposure calculator (§5l)
+│       ├── evaluate_ieee.py               <- real-data lift curve (§5o)
+│       ├── compare_baselines.py           <- scorer vs free heuristics (§5o)
+│       ├── ablate_signals.py              <- per-signal contribution (§5o)
+│       ├── adversarial_cases.py           <- Claude designs the tests (§5o)
 │       ├── demo_reset.py                  <- 3 curated clusters for a take
 │       ├── simulate_agent_cadence.py      <- live 4.0s-interval demo
 │       ├── verify_ingest.py               <- ingest self-test, rolls back
@@ -135,6 +146,12 @@ RingSentinel/
 │       ├── verify_resilience.py           <- breaks 6 things, names fallbacks
 │       ├── verify_explanation_grader.py   <- proves the grader can fail
 │       └── verify_claude_auth.py          <- Agent SDK auth check
+│   └── tests/                 <- pytest. PURE: no db, no network, no model
+│       ├── conftest.py            <- the shipped DetectorConfig, unmodified
+│       ├── test_scoring.py        <- saturation, soft-OR, the three §5b findings
+│       ├── test_regressions.py    <- every bug that shipped once
+│       ├── test_invariants.py     <- #1/#2/#4/#5, fast, AST-based
+│       └── test_cost_and_thresholds.py
 └── frontend/
     ├── lib/
     │   ├── tokens.ts          <- design tokens, JS mirror of globals.css
@@ -924,6 +941,13 @@ docker compose exec backend python -m scripts.verify_explanation_grader
 # Phase 11 - monetization arithmetic. No database writes, no model calls.
 docker compose exec backend python -m scripts.monetization \
     --merchants 50 --transactions 2000
+
+# Phase 14 - evidence from outside this project (§5o).
+# --limit 0 is all 524,834 rows; anything less is a slice and must be labelled.
+docker compose exec backend python -m scripts.evaluate_ieee --limit 0
+docker compose exec backend python -m scripts.compare_baselines
+docker compose exec backend python -m scripts.ablate_signals --ieee 20000
+docker compose exec backend python -m scripts.adversarial_cases
 ```
 
 Snapshots are stored in `evaluation_runs` so a reported number cannot silently
@@ -1604,6 +1628,205 @@ listener cannot scan back, so these are held to the page's standard.
 
 ---
 
+## 5o. Phase 14 — measured against evidence from outside this project
+
+Every number in §5b through §5k was measured on a corpus this project
+generated. That corpus is **separable by construction** — ring identities are
+salted per ring, background accounts each get their own device, address and
+instrument — so a clean result there is evidence the detector does what it was
+designed to do, and no evidence at all about production. §5b-eval says so. This
+phase attacks that limit from four directions, all of which produce evidence
+this project could not have manufactured in its own favour.
+
+**Read this before quoting any headline number.** Three of the four results are
+bad for the project, and they are the reason the good ones are worth anything.
+
+### `evaluation/ieee.py` — the detector on data it did not create
+
+IEEE-CIS Fraud Detection: 590,540 real transactions at a **3.50%** population
+fraud rate. **524,834** carry the `card1`/`addr1` fields this needs; among those
+the base rate is **2.46%**. One card in that data carries 14,112 transactions;
+the busiest attribute in our own corpus is shared by nine accounts.
+
+**What it can and cannot measure.** The dataset labels *transactions*, not
+crews — it never says which accounts worked together — so **there is no ring to
+recall and no precision to report**. Any such figure would answer a different
+question from the one §5b-eval answers, and printing the two side by side would
+be dishonest. What it *can* measure is **lift**: whether flagged clusters carry
+a materially higher fraud rate than the population. `scripts/evaluate_ieee.py`
+therefore reports a lift-by-score-rank curve and nothing else.
+
+| Slice by score | Fraud rate | Lift |
+|---|---|---|
+| top 2% | 0.89% | **0.36× — worse than the base rate** |
+| top 10% | 2.76% | **1.12×** |
+| top 25% | 2.85% | 1.16× |
+| top 50% | 2.61% | 1.06× |
+| everything | 2.56% | 1.04× |
+
+At the calibrated threshold it flagged **2,002 of 2,006 candidates**. The
+diagnostics say why: the largest cluster runs to **1,568 accounts**, so
+attribute reuse saturates, and the premise that sharing above a small floor is
+suspicious does not survive real payment data. **The threshold does not
+transfer; the ranking barely does.** The tool's own verdict — *"weak but
+non-zero ranking signal, below what would justify deploying this against real
+traffic"* — is printed by the script and is not softened anywhere.
+
+⚠ **The account proxy is an assumption and the whole result rests on it.**
+IEEE-CIS has no customer column, so an account is *constructed* as
+`card1 + addr1`. Because the proxy contains `card1`, accounts that "share an
+instrument" necessarily differ in address, and vice versa. That is a reasonable
+reading of coordinated behaviour and it is still a modelling choice this project
+made, not a fact the data reports. `MAP_ADDR1_AS_ADDRESS = False` for the same
+reason: `addr1` is a coarse billing region, not a delivery address, and mapping
+it as one would manufacture address links that do not exist.
+
+⚠ **A published number here was wrong, and the correction is the point.** The
+first run used a 20,000-row slice and showed **1.62×** top-decile lift, which
+was written into the README and the landing page before it was checked against
+the full dataset. On all 524,834 rows it is **1.12×**. The slice result was a
+small-sample artefact. Both are kept, in the repo and on the site, because a
+project that only publishes the measurement that flattered it has not measured
+anything. Run the full thing with `--limit 0`; anything less is a slice and must
+be labelled as one.
+
+### `evaluation/baselines.py` — is the scorer worth four signals?
+
+The obvious question an ML-literate reviewer asks first, and nothing in the repo
+answered it. Same graph, same clustering, same candidate clusters — **only the
+flagging rule changes**, so any difference is attributable to the scorer alone.
+Rules needing a budget get exactly as many flags as RingSentinel raised.
+
+| Rule | Ring recall | Precision | False flags |
+|---|---|---|---|
+| **RingSentinel** | 100% | **100%** | 0 |
+| Naive: any attribute shared by ≥3 accounts | 100% | 92% | 1 |
+| Attribute reuse alone | 92% | 92% | 1 |
+| Largest clusters | 92% | 92% | 1 |
+| Random | 75% | 75% | 3 |
+
+**A one-line heuristic gets 100% recall and 92% precision.** The four-signal
+scorer buys one false flag, on twelve rings. That is a real margin and a small
+one, and it must be reported as such — the honest reading is that *the seeded
+corpus is easy*, which is exactly what §5b-eval already said.
+
+### `evaluation/ablation.py` — does each signal earn its weight?
+
+For each signal, two runs: **WITHOUT** it (weight zeroed, the other three
+renormalised to sum to 1) and **ALONE** (that signal carrying the whole score).
+
+Renormalising is not cosmetic. Zeroing a 0.45 weight without it drops every
+score by up to 0.45, so a fixed 0.30 threshold flags far less — the run would
+measure a shift in *scale* rather than a loss of *information*.
+
+| Weighting | Seeded recall | Top-decile lift *(20k slice)* |
+|---|---|---|
+| All four signals | 100% | **1.62×** |
+| without attribute reuse | 67% | 1.35× |
+| without timing regularity | **100%** (no cost) | 1.35× |
+| without concentration | **100%** (no cost) | 1.37× |
+| without account shallowness | 92% | 1.51× |
+
+**The two signals that look like dead weight on synthetic data are among the
+most valuable on real data.** The seeded corpus is separable by attribute reuse
+alone, so the behavioural signals never get a chance to matter; on real data,
+where sharing a card is ubiquitous and uninformative, timing and concentration
+are what discriminate. That is the strongest available answer to *"why four
+signals?"*, and it could only be obtained from data this project did not make.
+
+⚠ The right-hand column is the **20,000-row slice throughout**, deliberately.
+Holding the sample fixed is what makes the five runs comparable; the
+*differences between rows* are the finding, not the absolute figures. Do not
+quote 1.62× from this table as a standalone result — the full-dataset figure is
+1.12× and is in the section above.
+
+### `evaluation/adversarial.py` — cases designed by something that did not build it
+
+BLINDSPOTS.md carries a caveat it cannot answer on its own: *"the cases share an
+author with the detector."* So Claude — which has never seen the detector's
+source — is given only its **published description** and asked to design cases
+against it. Given that, it produced five. **The detector handled none.**
+
+| Case | Outcome |
+|---|---|
+| Ring rotating instruments in pairs | missed — every attribute sits under the 3-account floor |
+| Reshipping ring sharing only addresses | missed — exploits the deliberate 0.40 address weight |
+| Aged mule pool, k held at 3 | missed — sits where the saturation curve is weakest |
+| Family sharing card, device and address | **wrongly flagged at 0.55** |
+| Campus kiosk cohort on scheduled top-ups | **wrongly flagged at 0.57** |
+
+⚠ **Defensive-only, enforced by the design rather than promised.** Claude
+returns a **specification** — how many accounts, what they share, how they are
+paced — never transactions; this module realises it. Cases are inserted through
+the real ingest path, measured, and rolled back in a `finally`, exactly as
+`evaluation/blindspots.py` does. Results are reported as weakness *classes* and
+scores; no reproducible recipe is written to any file this repo publishes. The
+model runs `allowed_tools=[]` with no MCP servers, so there is no function for
+it to call even if the prompt were subverted. It designs; it decides nothing.
+
+⚠ **A known fidelity limit.** The realiser turns "12 accounts rotating across 6
+instruments" into 6 disjoint pairs rather than one rotating cohort. The case
+still lands where it was aimed — under the evidence floor — but it is a
+simplification of what was specified, and the finding should be read as *"a
+ring holding every attribute under the floor is missed"* rather than as an
+exact reproduction of the design.
+
+### `detection/linkage.py` — the obvious fix, built, measured, and left off
+
+Every ring that got past the detector used one move: keep the accounts on any
+*single* attribute at or below the evidence floor while linking many accounts
+overall. Twelve pairs each on their own card is twenty-four coordinated
+accounts, and `find_shared_attributes` discards all of it because
+`MIN_CUSTOMERS_PER_SHARED_ATTRIBUTE = 3`. Linkage asks what the per-attribute
+signals structurally cannot: **what fraction of accounts in this cluster are
+tied to another account in it by anything at all**, counting what the floor
+throws away.
+
+It works, and it is **shipped switched off** — `WEIGHT_LINKAGE = 0.0`:
+
+| linkage weight | address-only ring | family (innocent) |
+|---|---|---|
+| **0.00** *(shipped)* | missed | flagged 0.547 |
+| 0.20 | **caught** | **worse: 0.747** |
+| 0.35 | caught | much worse: 0.897 |
+
+A household sharing a card, a device and an address is the most tightly joined
+thing in any graph, so a signal that rewards joinedness cannot separate one from
+a crew — it makes the false positives *worse*. Enabling it trades a missed ring
+for a wrongly flagged family. **For a system whose entire claim is that it does
+not act on people, that is the worse trade.** The code, the measurement and the
+reason are all kept, because "we tried the obvious fix and it made things worse"
+is a finding.
+
+Separating a household from a crew remains the job of account shallowness and
+timing. The evidence floor is *not* removed either: two accounts on one card is
+weak evidence, and showing it would fill the console's evidence table with
+noise. **The floor governs what is shown as evidence; linkage governs what is
+noticed.**
+
+### Two more switches that exist and are deliberately off
+
+| Flag | Default | Why |
+|---|---|---|
+| `POPULATION_RELATIVE_REUSE` (`detection/population.py`) | `False` | Hypothesis: score reuse relative to how rare that degree of sharing is in the population. **Measured and refuted** — it did not improve lift on IEEE-CIS. Kept with the negative result attached. |
+| `select_flagged(mode=...)` (`detection/thresholds.py`) | `absolute` | `percentile` and `budget` modes exist because the IEEE run showed the absolute cut does not transfer. Capacity-based selection is the rule that generalises; the seeded corpus's reported numbers stay on `absolute` so they remain comparable to every earlier phase. |
+
+### Commands
+
+```bash
+# Real data. --limit 0 is the full 524,834 rows; anything less is a slice.
+docker compose exec backend python -m scripts.evaluate_ieee --limit 0
+docker compose exec backend python -m scripts.compare_baselines
+docker compose exec backend python -m scripts.ablate_signals --ieee 20000
+docker compose exec backend python -m scripts.adversarial_cases   # calls Claude
+```
+
+`scripts/evaluate_ieee.py` needs `backend/data/ieee/` — a 683 MB dataset,
+licensed on download and **not redistributed in this repo**. It is a local tool;
+nothing on the deployed path reads it.
+
+---
+
 ## 6. Commands
 
 ```bash
@@ -1690,10 +1913,61 @@ docker compose exec backend alembic upgrade head
 | **11** | Monetization calculator + `MONETIZATION.md` (§5l) | **Done** |
 | **U0-U5** | UI pass: layout fix, palette, real-data hero canvas, console UX, threshold scrubber, ship polish (§5m) | **Done** |
 | **U6** | Spoken explanations: help card on both surfaces, case files read aloud (§5n) | **Done** |
+| **14** | Outside evidence: IEEE-CIS lift, baseline comparison, signal ablation, Claude-designed adversarial cases, the linkage signal built and left off (§5o) | **Done** |
 
 **Phase 1 constraints that were deliberately honoured:** no fake/mock data, no
 UI beyond a placeholder page, no detection logic. Do not "helpfully" add these
 early — later phases depend on doing them properly.
+
+---
+
+## 7a. How this is checked — two layers, deliberately separate
+
+| Layer | Covers | Method |
+|---|---|---|
+| `scripts/verify_*.py` | The guarantees: human gate, append-only log, detector isolation, failure handling, chain integrity | Breaks each **for real** against a live database, rolls back, exits non-zero on failure |
+| `backend/tests/` | Arithmetic, parsing, and every bug that shipped once | Pure pytest — no database, no network, no model calls |
+
+The verifiers are the stronger evidence and remain the primary proof: a trigger
+that refuses an unguarded `UPDATE` is proven by attempting one. The unit suite
+covers what they structurally cannot and runs in milliseconds, so a regression
+surfaces on the commit that introduces it rather than the next time somebody
+remembers to run a script.
+
+```bash
+docker compose exec backend python -m pytest
+```
+
+### ⚠️ The suite found a live bug on its first run — a fourth empty-set failure
+
+`_numbers_in()` stripped currency with `Rs\.?` under `re.I` and **no letter
+boundary**, so the `rs` inside an ordinary word matched. `"the cluster covers
+9471 transactions"` parsed as `"cove"` plus a rupee amount of 9471, and the
+number was removed before the grounding check saw it. Every figure preceded by
+a word ending in *rs* — covers, clusters, orders, numbers, users, members —
+silently disappeared, so a fabricated count in any such sentence would have
+passed. Fixed with lookarounds (`(?<![A-Za-z])`, `(?![A-Za-z])`) rather than
+word-boundary escapes, because the rupee sign is not a word character.
+
+`scripts/verify_explanation_grader.py` did **not** catch it: its fabricated-count
+fixture happens not to place the number after a word ending in *rs*. A
+fixture-based check only tests the fixtures it has.
+
+⚠️ **Measured impact: none, and that is part of the finding.** The bug fired
+four times across the 15 stored case files, but the only figure it swallowed was
+a `12`, below `FREE_NUMBER_CEILING`, so unconstrained regardless. Re-grading
+after the fix returns exactly what §5k already reports — **15/15, 31 of 111
+numbers constrained** — so BLINDSPOTS.md needed no regeneration. The defect was
+real and latent: it would have hidden a fabricated *large* count in a sentence
+such as "the cluster covers 9,471 transactions", and none of the fifteen
+contained one. Report it as a live bug with no measurable effect on this corpus,
+never as a correction to the published numbers.
+
+This is now the **fourth** time this project has shipped a checker that reported
+success over an empty set — the `0x08` tokeniser, the blind-spot matcher whose
+`LIKE` pattern matched no subjects, a chain verifier over zero rows, and this.
+**Whenever a check passes, assert that it examined something.** Every checker in
+this repo should carry a non-empty assertion, and the ones that do are marked.
 
 ---
 
