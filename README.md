@@ -6,6 +6,8 @@
 
 **Razorpay AI Buildathon · AI Risk Manager track**
 
+[![CI](https://github.com/devaskswhy/RingSentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/devaskswhy/RingSentinel/actions/workflows/ci.yml)
+
 [**Live site**](https://ring-sentinel-khaki.vercel.app) · [**API**](https://ringsentinel.onrender.com/docs) · [Architecture](ARCHITECTURE.md) · [Where it's weak](BLINDSPOTS.md) · [How it makes money](MONETIZATION.md) · [Deploying](DEPLOY.md)
 
 > Most fraud tools score one payment at a time. That works for a stolen card and
@@ -456,6 +458,15 @@ The verifiers are the stronger evidence and they came first: a trigger that
 refuses an unguarded `UPDATE` is proven by attempting one, not by mocking it.
 The unit tests cover what the verifiers structurally cannot, and they run in
 milliseconds, so a regression surfaces on the commit that introduces it.
+
+**CI runs the unit tests, the grader self-test, and the frontend typecheck and
+build on every push.** It deliberately does *not* run the database-backed
+verifiers, and the reason is worth stating: they need the seeded corpus, and on
+a freshly migrated empty database four of the five **fail** rather than pass.
+That was measured, not assumed. Verifiers that refuse to report success over an
+empty set are behaving correctly — that is the exact bug this repo has shipped
+four times — so wiring them to a green tick they cannot honestly earn would
+reintroduce it. They run locally, against real data.
 
 **They already earned their place.** Writing the tokeniser tests exposed a live
 bug in the case-file grader: `Rs\.?` ran case-insensitively with no letter

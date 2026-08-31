@@ -1938,6 +1938,31 @@ remembers to run a script.
 docker compose exec backend python -m pytest
 ```
 
+### What CI runs, and what it deliberately does not
+
+`.github/workflows/ci.yml`, on every push and PR:
+
+| Job | Steps |
+|---|---|
+| `backend` | `pytest` (59 tests) · `scripts.verify_explanation_grader` |
+| `frontend` | `npm ci` · `tsc --noEmit` · `next build` |
+
+The typecheck is a **separate step from the build** on purpose: `next build`
+once reported *"Compiled successfully"* and then failed type checking on a
+stale generated artifact, and running `tsc` alone says which of the two broke.
+
+⚠️ **The database-backed verifiers are not in CI, and that is a decision rather
+than an omission.** `verify_human_gate`, `verify_resilience`, `verify_ingest`
+and `verify_detector_isolation` need the seeded corpus. Measured against a
+freshly migrated, unseeded database: **four of the five exit non-zero.** They
+are refusing to report success over an empty set, which is correct — it is the
+failure this project has shipped four times — so attaching them to a green tick
+they cannot honestly earn would reintroduce the very bug §7a documents. Run them
+locally, against real data.
+
+Both CI commands were checked against an unreachable `DATABASE_URL` before the
+workflow was committed, so the jobs do not depend on a database existing at all.
+
 ### ⚠️ The suite found a live bug on its first run — a fourth empty-set failure
 
 `_numbers_in()` stripped currency with `Rs\.?` under `re.I` and **no letter
